@@ -1,0 +1,151 @@
+@import "bootstrap/dist/css/bootstrap.min.css";
+
+/* ===============================
+   GLOBAL THEME
+   =============================== */
+:root {
+  --purple-main: #8b5cf6;
+  --purple-accent: #a78bfa;
+  --purple-deep: #5b21b6;
+
+  --bg-black: #0f0f14;
+  --bg-dark: #141826;
+  --border-dark: #2b2f3f;
+  --text-light: #ffffff;
+  --text-muted: #9a9aa5;
+}
+
+/* Background */
+body {
+  background: var(--bg-black);
+  color: var(--text-light);
+}
+
+/* ===============================
+   AUTH CARD (Login & Register)
+   =============================== */
+.auth-card {
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--bg-dark);
+  border: 1px solid var(--border-dark);
+  box-shadow: 0 30px 70px rgba(0,0,0,.45);
+}
+
+.auth-header {
+  background: linear-gradient(135deg, var(--purple-deep), var(--purple-main));
+  color: #fff;
+  padding: 1.75rem 1.25rem;
+  text-align: center;
+}
+
+.auth-body {
+  padding: 1.75rem;
+}
+
+/* ===============================
+   INPUTS
+   =============================== */
+.form-control {
+  background: var(--bg-black);
+  color: #fff;
+  border: 1px solid var(--border-dark);
+}
+
+.form-control:focus {
+  border-color: var(--purple-main);
+  box-shadow: 0 0 0 .25rem rgba(139,92,246,.3);
+  background: var(--bg-black);
+  color: #fff;
+}
+
+.form-label {
+  color: var(--purple-accent);
+}
+
+/* ===============================
+   BUTTONS
+   =============================== */
+.btn-primary,
+.btn-success,
+.btn-dark-purple {
+  background: linear-gradient(135deg, var(--purple-deep), var(--purple-main));
+  border: none;
+  color: white;
+}
+
+.btn-primary:hover,
+.btn-success:hover,
+.btn-dark-purple:hover {
+  background: linear-gradient(135deg, #4c1d95, #7c3aed);
+}
+
+/* ===============================
+   NAVBAR
+   =============================== */
+.navbar {
+  background: #0b0b10 !important;
+  border-bottom: 1px solid var(--border-dark);
+}
+
+.navbar-brand,
+.nav-link {
+  color: white !important;
+}
+
+.nav-link:hover {
+  color: var(--purple-main) !important;
+}
+
+/* ===============================
+   CARDS
+   =============================== */
+.card {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-dark);
+  color: #fff;
+}
+
+/* ===============================
+   TABLES
+   =============================== */
+.table {
+  color: white;
+}
+
+.table thead {
+  background: var(--purple-deep);
+}
+
+.table tbody tr {
+  background: #111322;
+}
+
+.table tbody tr:hover {
+  background: #1a1d2b;
+}
+
+/* ===============================
+   LINKS & TEXT
+   =============================== */
+a {
+  color: var(--purple-main);
+}
+
+a:hover {
+  color: var(--purple-accent);
+}
+
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+/* ===============================
+   RESPONSIVE
+   =============================== */
+@media (max-width: 680px) {
+  .auth-card {
+    margin: 1rem;
+  }
+}
+
