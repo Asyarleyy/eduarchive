@@ -10,11 +10,18 @@ export default function ChannelShow() {
     const [materials, setMaterials] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showUploadForm, setShowUploadForm] = useState(false);
+    const [showCodePopup, setShowCodePopup] = useState(false);
     const [uploadForm, setUploadForm] = useState({
         title: '',
         description: '',
         file: null,
     });
+
+    const copyAccessCode = () => {
+    navigator.clipboard.writeText(channel.access_code);
+    alert("Access code copied to clipboard!");
+};
+
 
     useEffect(() => {
         fetchChannel();
@@ -92,10 +99,16 @@ export default function ChannelShow() {
                             <h1 className="h2 fw-bold text-white mb-2">{channel.title}</h1>
                             <p className="text-muted mb-0">{channel.description}</p>
                             {user?.role === 'teacher' && (
-                                <div className="mt-3 small text-muted">
-                                    Access Code: <span className="text-white font-monospace" style={{ color: '#8b5cf6' }}>{channel.access_code}</span>
-                                </div>
-                            )}
+                                <div className="mt-3">
+                                    <button
+                                        className="btn btn-primary"
+                                    onClick={() => setShowCodePopup(true)}
+                        >
+            Show Access Code
+        </button>
+    </div>
+)}
+
                         </div>
                     </div>
                 )}
@@ -172,6 +185,29 @@ export default function ChannelShow() {
                     )}
                 </div>
             </div>
+            {showCodePopup && (
+    <div
+        className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+        style={{ background: "rgba(0,0,0,.6)", zIndex: 9999 }}
+    >
+        <div className="card p-4 text-center" style={{ minWidth: "400px" }}>
+            <h4 className="mb-3 text-white">Channel Access Code</h4>
+
+            <div className="fs-3 fw-bold text-white mb-3 font-monospace">
+                {channel.access_code}
+            </div>
+
+            <button className="btn btn-primary me-2" onClick={copyAccessCode}>
+                Copy Code
+            </button>
+
+            <button className="btn btn-secondary" onClick={() => setShowCodePopup(false)}>
+                Close
+            </button>
+        </div>
+    </div>
+)}
+
         </div>
     );
 }

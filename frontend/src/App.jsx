@@ -5,12 +5,16 @@ import Layout from './components/Layout';
 import GuestLayout from './components/GuestLayout';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
-import Dashboard from './pages/Dashboard';
-import Channels from './pages/channels/Channels';
-import ChannelCreate from './pages/channels/ChannelCreate';
-import ChannelShow from './pages/channels/ChannelShow';
-import Profile from './pages/Profile';
+import Dashboard from './pages/dashboard/Dashboard';
+import TeacherChannels from './pages/channels/TeacherChannels';
+import CreateChannel from './pages/channels/CreateChannel';
+import ChannelDetails from './pages/channels/ChannelDetails';
+import Profile from './pages/dashboard/Profile';
 import Welcome from './pages/Welcome';
+import JoinChannel from "./pages/channels/JoinChannel";
+import StudentChannels from "./pages/channels/StudentChannels";
+
+
 
 function AppRoutes() {
     const { user, loading } = useAuth();
@@ -36,10 +40,14 @@ function AppRoutes() {
             {/* Protected Routes */}
             <Route element={<Layout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/channels" element={<Channels />} />
-                <Route path="/channels/create" element={<ChannelCreate />} />
-                <Route path="/channels/:id" element={<ChannelShow />} />
+                <Route path="/channels" element={<TeacherChannels />} />
+                <Route path="/channels/create" element={<CreateChannel />} />
+                <Route path="/channels/:id" element={<ChannelDetails />} />
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/join" element={<JoinChannel />} />
+                <Route path="/my-channels" element={<StudentChannels />} />
+
+
             </Route>
         </Routes>
     );
