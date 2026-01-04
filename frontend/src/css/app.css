@@ -1,151 +1,154 @@
 @import "bootstrap/dist/css/bootstrap.min.css";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
 
 /* ===============================
-   GLOBAL THEME
+   GLOBAL THEME & VARIABLES
    =============================== */
 :root {
-  --purple-main: #8b5cf6;
-  --purple-accent: #a78bfa;
-  --purple-deep: #5b21b6;
-
-  --bg-black: #0f0f14;
-  --bg-dark: #141826;
-  --border-dark: #2b2f3f;
-  --text-light: #ffffff;
-  --text-muted: #9a9aa5;
+  --purple-glow: #a855f7;
+  --purple-deep: #6b21ff;
+  --bg-black: #050505;
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.12);
 }
 
-/* Background */
-body {
-  background: var(--bg-black);
-  color: var(--text-light);
+body, .min-h-screen {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background-color: var(--bg-black) !important;
+  background-image: 
+    radial-gradient(circle at 0% 0%, rgba(107, 33, 255, 0.15) 0%, transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(168, 85, 247, 0.1) 0%, transparent 45%) !important;
+  color: #ffffff;
+  min-height: 100vh;
 }
 
 /* ===============================
-   AUTH CARD (Login & Register)
+   LANDING PAGE (HERO SECTION)
    =============================== */
-.auth-card {
-  border-radius: 20px;
-  overflow: hidden;
-  background: var(--bg-dark);
-  border: 1px solid var(--border-dark);
-  box-shadow: 0 30px 70px rgba(0,0,0,.45);
+.hero-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.auth-header {
-  background: linear-gradient(135deg, var(--purple-deep), var(--purple-main));
-  color: #fff;
-  padding: 1.75rem 1.25rem;
-  text-align: center;
+/* REFINED HERO TITLE */
+.hero-title {
+  font-size: 3.5rem !important; /* Scaled down from 5rem for a normal look */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  background: linear-gradient(90deg, #ffffff 0%, #e9d5ff 25%, #a855f7 50%, #e9d5ff 75%, #ffffff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shineEffect 5s linear infinite;
 }
 
-.auth-body {
-  padding: 1.75rem;
+/* REFINED HERO ARCHIVE ICON */
+.hero-title::before {
+  content: '';
+  width: 64px; /* Scaled down from 90px to fit normal landing page proportions */
+  height: 54px;
+  display: block;
+  background: linear-gradient(135deg, var(--purple-glow), var(--purple-deep));
+  border-radius: 6px;
+  clip-path: polygon(0% 15%, 35% 15%, 45% 0%, 100% 0%, 100% 100%, 0% 100%);
+  /* Paper Notes Hint */
+  box-shadow: 
+    inset 0 8px 0 rgba(255, 255, 255, 0.4), 
+    inset 0 16px 0 rgba(255, 255, 255, 0.2);
+  filter: drop-shadow(0 0 20px var(--purple-glow));
+  animation: heroFloat 4s ease-in-out infinite;
+}
+
+@keyframes heroFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes shineEffect {
+  to { background-position: 200% center; }
+}
+
+.hero-subtitle {
+  font-size: 1.15rem; /* Standard subtitle size */
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+/* STANDARD HERO BUTTONS */
+.btn-hero {
+  padding: 14px 35px !important; /* Normal landing page button size */
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  border-radius: 12px !important;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+}
+
+.btn-hero.btn-primary {
+  background: linear-gradient(135deg, var(--purple-deep), var(--purple-glow)) !important;
+  border: none !important;
+  box-shadow: 0 10px 20px rgba(107, 33, 255, 0.25);
+}
+
+.btn-hero.btn-outline-purple {
+  background: rgba(168, 85, 247, 0.05) !important;
+  border: 1px solid var(--purple-glow) !important;
+  color: white !important;
+  backdrop-filter: blur(10px);
+}
+
+.btn-hero:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 15px 30px rgba(168, 85, 247, 0.35);
 }
 
 /* ===============================
-   INPUTS
+   NAVBAR BRAND (32PX ICON)
    =============================== */
-.form-control {
-  background: var(--bg-black);
-  color: #fff;
-  border: 1px solid var(--border-dark);
+.navbar-brand {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  font-weight: 800 !important;
+  font-size: 1.4rem !important;
+  background: linear-gradient(90deg, #ffffff 0%, #a855f7 50%, #ffffff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shineEffect 5s linear infinite;
 }
 
-.form-control:focus {
-  border-color: var(--purple-main);
-  box-shadow: 0 0 0 .25rem rgba(139,92,246,.3);
-  background: var(--bg-black);
-  color: #fff;
-}
-
-.form-label {
-  color: var(--purple-accent);
-}
-
-/* ===============================
-   BUTTONS
-   =============================== */
-.btn-primary,
-.btn-success,
-.btn-dark-purple {
-  background: linear-gradient(135deg, var(--purple-deep), var(--purple-main));
-  border: none;
-  color: white;
-}
-
-.btn-primary:hover,
-.btn-success:hover,
-.btn-dark-purple:hover {
-  background: linear-gradient(135deg, #4c1d95, #7c3aed);
+.navbar-brand::before {
+  content: '';
+  width: 32px;
+  height: 28px;
+  display: inline-block;
+  background: linear-gradient(135deg, var(--purple-glow), var(--purple-deep));
+  border-radius: 4px;
+  clip-path: polygon(0% 15%, 35% 15%, 45% 0%, 100% 0%, 100% 100%, 0% 100%);
+  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.4);
+  filter: drop-shadow(0 0 8px var(--purple-glow));
 }
 
 /* ===============================
-   NAVBAR
+   GLASS UI COMPONENTS
    =============================== */
 .navbar {
-  background: #0b0b10 !important;
-  border-bottom: 1px solid var(--border-dark);
+  margin: 15px 25px !important;
+  background: rgba(10, 10, 15, 0.6) !important;
+  backdrop-filter: blur(25px) saturate(200%);
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 20px !important;
 }
 
-.navbar-brand,
-.nav-link {
-  color: white !important;
+.auth-card, .card {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
 }
-
-.nav-link:hover {
-  color: var(--purple-main) !important;
-}
-
-/* ===============================
-   CARDS
-   =============================== */
-.card {
-  background: var(--bg-dark);
-  border: 1px solid var(--border-dark);
-  color: #fff;
-}
-
-/* ===============================
-   TABLES
-   =============================== */
-.table {
-  color: white;
-}
-
-.table thead {
-  background: var(--purple-deep);
-}
-
-.table tbody tr {
-  background: #111322;
-}
-
-.table tbody tr:hover {
-  background: #1a1d2b;
-}
-
-/* ===============================
-   LINKS & TEXT
-   =============================== */
-a {
-  color: var(--purple-main);
-}
-
-a:hover {
-  color: var(--purple-accent);
-}
-
-.text-muted {
-  color: var(--text-muted) !important;
-}
-
-/* ===============================
-   RESPONSIVE
-   =============================== */
-@media (max-width: 680px) {
-  .auth-card {
-    margin: 1rem;
-  }
-}
-

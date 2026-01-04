@@ -424,6 +424,113 @@ app.post('/api/channels/:id/materials', authenticateToken, upload.single('file')
   }
 });
 
+app.get('/api/channels/:id/members', authenticateToken, async (req, res) => {
+  try {
+    const channelId = req.params.id;
+
+    const [channels] = await db.execute(
+      'SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL',
+      [channelId]
+    );
+
+    if (channels.length === 0) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+
+    const channel = channels[0];
+
+    if (channel.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only owner can view members' });
+    }
+
+    const [members] = await db.execute(
+  `SELECT users.id, users.name, users.email, cu.joined_at
+   FROM channel_user cu
+   JOIN users ON cu.user_id = users.id
+   WHERE cu.channel_id = ? AND users.id != ?`,
+  [channelId, channel.owner_id]
+);
+
+
+    res.json(members);
+
+  } catch (error) {
+    console.error('Get members error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.delete('/api/channels/:id/members/:userId', authenticateToken, async (req, res) => {
+  try {
+    const channelId = req.params.id;
+    const userId = req.params.userId;
+
+    const [channels] = await db.execute(
+      'SELECT * FROM channels WHERE id = ?',
+      [channelId]
+    );
+
+    if (channels.length === 0) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+
+    const channel = channels[0];
+
+    if (channel.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only owner can remove students' });
+    }
+
+    await db.execute(
+      'DELETE FROM channel_user WHERE channel_id = ? AND user_id = ?',
+      [channelId, userId]
+    );
+
+    await db.execute(
+      'UPDATE channels SET subscriber_count = subscriber_count - 1 WHERE id = ?',
+      [channelId]
+    );
+
+    res.json({ message: 'Student removed successfully' });
+
+  } catch (error) {
+    console.error('Remove member error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.delete('/api/channels/:id', authenticateToken, async (req, res) => {
+  try {
+    const channelId = req.params.id;
+
+    const [channels] = await db.execute(
+      'SELECT * FROM channels WHERE id = ?',
+      [channelId]
+    );
+
+    if (channels.length === 0) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+
+    const channel = channels[0];
+
+    if (channel.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only channel owner can delete channel' });
+    }
+
+    await db.execute(
+      'UPDATE channels SET deleted_at = NOW() WHERE id = ?',
+      [channelId]
+    );
+
+    res.json({ message: 'Channel deleted successfully' });
+
+  } catch (error) {
+    console.error('Delete channel error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
 app.get('/api/materials/:id/download', authenticateToken, async (req, res) => {
   try {
     const materialId = req.params.id;
@@ -465,6 +572,90 @@ app.get('/api/materials/:id/download', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+app.delete('/api/materials/:id', authenticateToken, async (req, res) => {
+  try {
+    const materialId = req.params.id;
+
+    const [materials] = await db.execute(
+      'SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL',
+      [materialId]
+    );
+
+    if (materials.length === 0) {
+      return res.status(404).json({ error: 'Material not found' });
+    }
+
+    const material = materials[0];
+
+    // check owner
+    const [channels] = await db.execute(
+      'SELECT * FROM channels WHERE id = ?',
+      [material.channel_id]
+    );
+
+    const channel = channels[0];
+
+    if (channel.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only channel owner can delete materials' });
+    }
+
+    // Soft delete
+    await db.execute(
+      'UPDATE materials SET deleted_at = NOW() WHERE id = ?',
+      [materialId]
+    );
+
+    res.json({ message: 'Material deleted successfully' });
+
+  } catch (error) {
+    console.error('Delete material error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.put('/api/materials/:id', authenticateToken, async (req, res) => {
+  try {
+    const materialId = req.params.id;
+    const { title, description } = req.body;
+
+    const [materials] = await db.execute(
+      'SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL',
+      [materialId]
+    );
+
+    if (materials.length === 0) {
+      return res.status(404).json({ error: 'Material not found' });
+    }
+
+    const material = materials[0];
+
+    const [channels] = await db.execute(
+      'SELECT * FROM channels WHERE id = ?',
+      [material.channel_id]
+    );
+
+    const channel = channels[0];
+
+    if (channel.owner_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only channel owner can edit materials' });
+    }
+
+    await db.execute(
+      `UPDATE materials 
+       SET title = ?, description = ?, updated_at = NOW() 
+       WHERE id = ?`,
+      [title, description || null, materialId]
+    );
+
+    res.json({ message: 'Material updated successfully' });
+
+  } catch (error) {
+    console.error('Update material error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 
 // Start server
 createConnection().then(() => {

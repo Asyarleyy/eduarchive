@@ -12,8 +12,6 @@ import ChannelDetails from './pages/channels/ChannelDetails';
 import Profile from './pages/dashboard/Profile';
 import Welcome from './pages/Welcome';
 import JoinChannel from "./pages/channels/JoinChannel";
-import StudentChannels from "./pages/channels/StudentChannels";
-
 
 
 function AppRoutes() {
@@ -45,8 +43,6 @@ function AppRoutes() {
                 <Route path="/channels/:id" element={<ChannelDetails />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/join" element={<JoinChannel />} />
-                <Route path="/my-channels" element={<StudentChannels />} />
-
 
             </Route>
         </Routes>
