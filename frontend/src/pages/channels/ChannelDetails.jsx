@@ -1,361 +1,369 @@
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import axios from 'axios';
-import { useAuth } from '../../contexts/AuthContext';
+import React, { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import axios from "axios";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function ChannelShow() {
-    const { id } = useParams();
-    const { user } = useAuth();
-    const [channel, setChannel] = useState(null);
-    const [materials, setMaterials] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showUploadForm, setShowUploadForm] = useState(false);
-    const [showCodePopup, setShowCodePopup] = useState(false);
-    const [uploadForm, setUploadForm] = useState({
-        title: '',
-        description: '',
-        file: null,
-    });
+  const { id } = useParams();
+  const { user } = useAuth();
 
-    const [showStudents, setShowStudents] = useState(false);
+  const [channel, setChannel] = useState(null);
+  const [materials, setMaterials] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    const [members, setMembers] = useState([]);
-    const [showMembers, setShowMembers] = useState(false);
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [showCodePopup, setShowCodePopup] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
 
+  const [previewMaterial, setPreviewMaterial] = useState(null);
 
-    const [editMaterial, setEditMaterial] = useState(null);
-    const [editForm, setEditForm] = useState({ 
-        title: "", 
-        description: "" 
-});
+  const [uploadForm, setUploadForm] = useState({
+    title: "",
+    description: "",
+    file: null,
+  });
 
-
-    const copyAccessCode = () => {
-    navigator.clipboard.writeText(channel.access_code);
-    alert("Access code copied to clipboard!");
-};
-
-
-    useEffect(() => {
+  // ================= LOAD DATA =================
+  useEffect(() => {
     fetchChannel();
     fetchMaterials();
-    fetchStudents();
-}, [id]);
+  }, [id]);
 
-
-    const fetchChannel = async () => {
-        try {
-            const response = await axios.get(`/api/channels/${id}`);
-            setChannel(response.data);
-        } catch (error) {
-            console.error('Error fetching channel:', error);
-        }
-    };
-
-    const fetchMaterials = async () => {
-        try {
-            const response = await axios.get(`/api/channels/${id}/materials`);
-            setMaterials(response.data);
-        } catch (error) {
-            console.error('Error fetching materials:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-
-const removeStudent = async (userId) => {
-  if (!window.confirm("Remove this student from channel?")) return;
-
-  try {
-      await axios.delete(`/api/channels/${id}/members/${userId}`);
-      alert("Student removed");
-      fetchMembers();
-  } catch (error) {
-      console.error("Remove student error:", error);
-      alert(error.response?.data?.error || "Failed to remove");
-  }
-};
-
-
-
-    const fetchStudents = async () => {
+  const fetchChannel = async () => {
     try {
-        const res = await axios.get(`/api/channels/${id}/members`);
-        setStudents(res.data);
-    } catch (error) {
-        console.error("Fetch students error:", error);
+      const res = await axios.get(`/api/channels/${id}`);
+      setChannel(res.data);
+    } catch {
+      console.error("Channel load error");
     }
-    };
+  };
 
-
-    const handleFileUpload = async (e) => {
-        e.preventDefault();
-        const formData = new FormData();
-        formData.append('title', uploadForm.title);
-        formData.append('description', uploadForm.description || '');
-        formData.append('file', uploadForm.file);
-
-        try {
-            await axios.post(`/api/channels/${id}/materials`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            setShowUploadForm(false);
-            setUploadForm({ title: '', description: '', file: null });
-            fetchMaterials();
-        } catch (error) {
-            console.error('Error uploading material:', error);
-            alert(error.response?.data?.error || 'Upload failed');
-        }
-    };
-
-    const handleDownload = async (material) => {
-        try {
-            const response = await axios.get(`/api/materials/${material.id}/download`, {
-                responseType: 'blob',
-            });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', material.file_name);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-        } catch (error) {
-            console.error('Download error:', error);
-            alert('Download failed');
-        }
-    };
-
-    const deleteChannel = async () => {
-  if (!window.confirm("Delete this channel? This action cannot be undone.")) return;
-
-  try {
-    await axios.delete(`/api/channels/${id}`);
-    alert("Channel deleted successfully");
-    window.location.href = "/channels";
-  } catch (err) {
-    console.error(err);
-    alert("Failed to delete channel");
-  }
-};
-
-
-    if (loading) {
-        return <div className="text-white p-5">Loading...</div>;
+  const fetchMaterials = async () => {
+    try {
+      const res = await axios.get(`/api/channels/${id}/materials`);
+      setMaterials(res.data);
+    } catch {
+      console.error("Materials load error");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return (
-        <div className="py-5">
-            <div className="container">
-                {channel && (
-                    <div className="card mb-4">
-                        <div className="card-body">
-                            <h1 className="h2 fw-bold text-white mb-2">{channel.title}</h1>
-                            <p className="text-muted mb-0">{channel.description}</p>
-                            {user?.role === "teacher" && (
-  <div className="mt-3 text-white">
+  const fetchMembers = async () => {
+    try {
+      const res = await axios.get(`/api/channels/${id}/members`);
+      setMembers(res.data);
+    } catch {
+      console.error("Members load error");
+    }
+  };
 
-    Students Joined: <b>{students.filter(s => s.id !== channel.owner_id).length}</b>
+  // ================= CHANNEL =================
+  const deleteChannel = async () => {
+    if (!window.confirm("Delete this channel permanently?")) return;
 
-        <button
-      className="btn btn-danger ms-3"
-      onClick={deleteChannel}
-    >
-      Delete Channel
-    </button>
+    try {
+      await axios.delete(`/api/channels/${id}`);
+      alert("Channel deleted");
+      window.location.href = "/channels";
+    } catch {
+      alert("Delete failed");
+    }
+  };
 
+  // ================= STUDENTS =================
+  const removeStudent = async (uid) => {
+    if (!window.confirm("Remove this student?")) return;
+
+    try {
+      await axios.delete(`/api/channels/${id}/members/${uid}`);
+      fetchMembers();
+    } catch {
+      alert("Failed to remove");
+    }
+  };
+
+  // ================= UPLOAD =================
+  const handleUpload = async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData();
+    formData.append("title", uploadForm.title);
+    formData.append("description", uploadForm.description || "");
+    formData.append("file", uploadForm.file);
+
+    try {
+      await axios.post(`/api/channels/${id}/materials`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setShowUploadForm(false);
+      setUploadForm({ title: "", description: "", file: null });
+      fetchMaterials();
+    } catch {
+      alert("Upload failed");
+    }
+  };
+
+  // ================= MATERIAL ACTIONS =================
+  const handleDownload = async (mat) => {
+    try {
+      const res = await axios.get(`/api/materials/${mat.id}/download`, {
+        responseType: "blob",
+      });
+
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = mat.file_name;
+      a.click();
+    } catch {
+      alert("Download failed");
+    }
+  };
+
+  const deleteMaterial = async (id) => {
+    if (!window.confirm("Delete material?")) return;
+
+    try {
+      await axios.delete(`/api/materials/${id}`);
+      fetchMaterials();
+      setPreviewMaterial(null);
+    } catch {
+      alert("Delete failed");
+    }
+  };
+
+  if (loading) return <div className="text-white p-5">Loading...</div>;
+
+  return (
+    <div className="py-5">
+      <div className="container">
+
+        {/* ================= CHANNEL HEADER ================= */}
+        {channel && (
+          <div className="card mb-4">
+            <div className="card-body">
+              <h2 className="text-white">{channel.title}</h2>
+              <p className="text-muted">{channel.description}</p>
+
+              {user?.role === "teacher" && (
+                <>
+                  <button className="btn btn-danger me-2" onClick={deleteChannel}>
+                    Delete Channel
+                  </button>
+
+                  <button className="btn btn-primary me-2" onClick={() => setShowCodePopup(true)}>
+                    Show Access Code
+                  </button>
+
+                  <button
+                    className="btn btn-outline-primary"
+                    onClick={() => {
+                      fetchMembers();
+                      setShowMembers(true);
+                    }}
+                  >
+                    View Students
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================= UPLOAD ================= */}
+        {user?.role === "teacher" && (
+          <div className="mb-4">
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowUploadForm(!showUploadForm)}
+            >
+              {showUploadForm ? "Cancel Upload" : "+ Upload Material"}
+            </button>
+
+            {showUploadForm && (
+              <div className="card mt-3">
+                <div className="card-body">
+                  <form onSubmit={handleUpload}>
+                    <label className="form-label">Title</label>
+                    <input
+                      className="form-control mb-3"
+                      value={uploadForm.title}
+                      onChange={(e) =>
+                        setUploadForm({ ...uploadForm, title: e.target.value })
+                      }
+                      required
+                    />
+
+                    <label className="form-label">Description</label>
+                    <textarea
+                      className="form-control mb-3"
+                      rows={3}
+                      value={uploadForm.description}
+                      onChange={(e) =>
+                        setUploadForm({ ...uploadForm, description: e.target.value })
+                      }
+                    />
+
+                    <label className="form-label">File</label>
+                    <input
+                      type="file"
+                      className="form-control"
+                      onChange={(e) =>
+                        setUploadForm({ ...uploadForm, file: e.target.files[0] })
+                      }
+                      required
+                    />
+
+                    <button className="btn btn-primary mt-3">Upload</button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= MATERIALS ================= */}
+        <h4 className="text-white mb-3">Materials</h4>
+
+        {materials.length === 0 ? (
+          <div className="card">
+            <div className="card-body text-muted text-center">
+              No materials yet
+            </div>
+          </div>
+        ) : (
+          <div className="row g-4">
+            {materials.map((m) => (
+              <div key={m.id} className="col-md-6 col-lg-4">
+                <div
+                  className="card h-100"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setPreviewMaterial(m)}
+                >
+                  <div className="card-body">
+                    <h5 className="text-white">{m.title}</h5>
+                    <p className="text-muted small">{m.description}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ================= PREVIEW POPUP ================= */}
+      {previewMaterial && (
+        <div className="popup-backdrop">
+          <div className="card p-4" style={{ minWidth: "900px" }}>
+            <div className="row">
+              
+              {/* LEFT PREVIEW */}
+              <div className="col-md-8">
+                <h5 className="text-white mb-3">Preview</h5>
+
+                <iframe
+                  src={`/api/materials/${previewMaterial.id}/preview`}
+                  width="100%"
+                  height="500px"
+                  title="Preview"
+                  style={{ borderRadius: "10px", background: "#000" }}
+                ></iframe>
+              </div>
+
+              {/* RIGHT PANEL */}
+              <div className="col-md-4">
+                <h4 className="text-white">{previewMaterial.title}</h4>
+                <p className="text-muted">{previewMaterial.description}</p>
+
+                <button
+                  className="btn btn-primary w-100 mb-2"
+                  onClick={() => handleDownload(previewMaterial)}
+                >
+                  Download
+                </button>
+
+                {user?.role === "teacher" && (
+                  <>
+                    <button
+                      className="btn btn-danger w-100 mb-2"
+                      onClick={() => deleteMaterial(previewMaterial.id)}
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
+
+                <button
+                  className="btn btn-secondary w-100"
+                  onClick={() => setPreviewMaterial(null)}
+                >
+                  Close
+                </button>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCodePopup && (
+  <div className="popup-backdrop">
+    <div className="card p-4 text-center" style={{ minWidth: "400px" }}>
+      <h4 className="text-white mb-3">Channel Access Code</h4>
+
+      <div className="fs-3 fw-bold text-white mb-3 font-monospace">
+        {channel.access_code}
+      </div>
+
+      <button
+        className="btn btn-primary me-2"
+        onClick={() => {
+          navigator.clipboard.writeText(channel.access_code);
+          alert("Copied!");
+        }}
+      >
+        Copy Code
+      </button>
+
+      <button
+        className="btn btn-secondary"
+        onClick={() => setShowCodePopup(false)}
+      >
+        Close
+      </button>
+    </div>
   </div>
 )}
 
-                            {user?.role === 'teacher' && (
-                                <div className="mt-3">
-                                    <button
-                                        className="btn btn-primary"
-                                    onClick={() => setShowCodePopup(true)}
-                        >
-            Show Access Code
-        </button>
-        <button
-  className="btn btn-outline-primary ms-2"
-  onClick={() => {
-      fetchMembers();
-      setShowMembers(true);
-  }}
->
-  View Joined Students
-</button>
-
-    </div>
-)}
-
-                        </div>
-                    </div>
-                )}
-
-                {user?.role === 'teacher' && (
-                    <div className="mb-4">
-                        <button
-                            onClick={() => setShowUploadForm(!showUploadForm)}
-                            className="btn btn-primary"
-                        >
-                            {showUploadForm ? 'Cancel Upload' : '+ Upload Material'}
-                        </button>
-
-                        {showUploadForm && (
-                            <div className="card mt-3">
-                                <div className="card-body">
-                                    <form onSubmit={handleFileUpload}>
-                                        <div className="mb-3">
-                                            <label className="form-label">Title</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={uploadForm.title}
-                                                onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="mb-3">
-                                            <label className="form-label">File</label>
-                                            <input
-                                                type="file"
-                                                className="form-control"
-                                                onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files[0] })}
-                                                required
-                                            />
-                                        </div>
-                                        <button type="submit" className="btn btn-primary">
-                                            Upload
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                <div>
-                    <h2 className="h4 fw-bold text-white mb-4">Materials</h2>
-                    {materials.length === 0 ? (
-                        <div className="card">
-                            <div className="card-body text-center text-muted">
-                                No materials yet.
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="row g-4">
-                            {materials.map((material) => (
-                                <div key={material.id} className="col-md-6 col-lg-4">
-                                    <div className="card h-100">
-                                        <div className="card-body">
-                                            <h5 className="card-title text-white">{material.title}</h5>
-                                            <p className="card-text text-muted small mb-3">{material.description}</p>
-                                            <button
-                                                onClick={() => handleDownload(material)}
-                                                className="btn btn-primary w-100"
-                                            >
-                                                Download
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-            {showCodePopup && (
-    <div
-        className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-        style={{ background: "rgba(0,0,0,.6)", zIndex: 9999 }}
-    >
-        <div className="card p-4 text-center" style={{ minWidth: "400px" }}>
-            <h4 className="mb-3 text-white">Channel Access Code</h4>
-
-            <div className="fs-3 fw-bold text-white mb-3 font-monospace">
-                {channel.access_code}
-            </div>
-
-            <button className="btn btn-primary me-2" onClick={copyAccessCode}>
-                Copy Code
-            </button>
-
-            <button className="btn btn-secondary" onClick={() => setShowCodePopup(false)}>
-                Close
-            </button>
-        </div>
-    </div>
-)}
 
 {showMembers && (
-  <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-      style={{ background: "rgba(0,0,0,.6)", zIndex: 9999 }}>
-      
-      <div className="card p-4" style={{ minWidth: "500px" }}>
-          <h4 className="text-white mb-3">
-              Channel Members ({members.length})
-          </h4>
-
-          {members.length === 0 ? (
-              <p className="text-muted">No students yet.</p>
-          ) : (
-              <ul className="list-group">
-                  {members.map(m => (
-                      <li key={m.id}
-                          className="list-group-item d-flex justify-content-between align-items-center">
-                          <div>
-                              <strong>{m.name}</strong>
-                              <br />
-                              <small className="text-muted">{m.email}</small>
-                          </div>
-
-                          <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => removeStudent(m.id)}
-                          >
-                              Remove
-                          </button>
-                      </li>
-                  ))}
-              </ul>
-          )}
-
-          <button
-              className="btn btn-secondary mt-3"
-              onClick={() => setShowMembers(false)}
-          >
-              Close
-          </button>
-      </div>
-  </div>
-)}
-
-{showStudents && (
-  <div
-    className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-    style={{ background: "rgba(0,0,0,.6)", zIndex: 9999 }}
-  >
+  <div className="popup-backdrop">
     <div className="card p-4" style={{ minWidth: "500px" }}>
-      
-      <h4 className="text-white mb-3">Channel Students</h4>
+      <h4 className="text-white mb-3">
+        Channel Members ({members.length})
+      </h4>
 
-      {students.length === 0 ? (
-        <p className="text-muted">No students yet</p>
+      {members.length === 0 ? (
+        <p className="text-muted">No students yet.</p>
       ) : (
         <ul className="list-group">
-          {students
-          .filter(s => s.id !== channel.owner_id)
-          .map(s => (
+          {members.map((m) => (
             <li
-              key={s.id}
-              className="list-group-item d-flex justify-content-between"
+              key={m.id}
+              className="list-group-item d-flex justify-content-between align-items-center"
             >
-              <span>{s.name} ({s.email})</span>
+              <div>
+                <strong>{m.name}</strong>
+                <br />
+                <small className="text-muted">{m.email}</small>
+              </div>
 
               <button
-                className="btn btn-sm btn-danger"
-                onClick={() => removeStudent(s.id)}
+                className="btn btn-danger btn-sm"
+                onClick={() => removeStudent(m.id)}
               >
                 Remove
               </button>
@@ -366,16 +374,15 @@ const removeStudent = async (userId) => {
 
       <button
         className="btn btn-secondary mt-3"
-        onClick={() => setShowStudents(false)}
+        onClick={() => setShowMembers(false)}
       >
         Close
       </button>
-
     </div>
   </div>
 )}
 
-        </div>
-    );
-}
 
+    </div>
+  );
+}

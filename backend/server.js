@@ -573,6 +573,51 @@ app.get('/api/materials/:id/download', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/materials/:id/preview', authenticateToken, async (req, res) => {
+  try {
+    const materialId = req.params.id;
+
+    const [materials] = await db.execute(
+      "SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL",
+      [materialId]
+    );
+
+    if (materials.length === 0)
+      return res.status(404).json({ error: "Material not found" });
+
+    const material = materials[0];
+
+    // Check access
+    const [channels] = await db.execute(
+      "SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL",
+      [material.channel_id]
+    );
+
+    const channel = channels[0];
+
+    if (channel.owner_id !== req.user.id) {
+      const [member] = await db.execute(
+        "SELECT * FROM channel_user WHERE channel_id = ? AND user_id = ?",
+        [material.channel_id, req.user.id]
+      );
+
+      if (member.length === 0)
+        return res.status(403).json({ error: "Access denied" });
+    }
+
+    const filePath = path.join(__dirname, material.file_path);
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Content-Type", material.file_mime);
+
+    res.sendFile(filePath);
+
+  } catch (err) {
+    console.error("Preview error:", err);
+    res.status(500).json({ error: "Preview failed" });
+  }
+});
+
+
 app.delete('/api/materials/:id', authenticateToken, async (req, res) => {
   try {
     const materialId = req.params.id;
