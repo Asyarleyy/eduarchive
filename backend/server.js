@@ -701,6 +701,286 @@ app.put('/api/materials/:id', authenticateToken, async (req, res) => {
   }
 });
 
+app.post("/api/materials/:id/update",
+  authenticateToken,
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+      const { title, description } = req.body;
+
+      const [[material]] = await db.execute(
+        "SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL",
+        [id]
+      );
+
+      if (!material) return res.status(404).json({ error: "Material not found" });
+
+      let filePath = material.file_path;
+      let fileMime = material.file_mime;
+      let fileName = material.file_name;
+
+      if (req.file) {
+        filePath = `/uploads/materials/${req.file.filename}`;
+        fileMime = req.file.mimetype;
+        fileName = req.file.originalname;
+      }
+
+      await db.execute(
+        `UPDATE materials 
+         SET title=?, description=?, file_path=?, file_mime=?, file_name=?, updated_at = NOW()
+         WHERE id=?`,
+        [title, description, filePath, fileMime, fileName, id]
+      );
+
+      res.json({ message: "Material updated" });
+    } catch (err) {
+      console.error("Update material error:", err);
+      res.status(500).json({ error: "Update failed" });
+    }
+  }
+);
+
+// ================= ANNOUNCEMENTS =================
+
+// Get announcements for channel
+app.get('/api/channels/:id/announcements', authenticateToken, async (req, res) => {
+  try {
+    const channelId = req.params.id;
+
+    const [channelRows] = await db.execute(
+      'SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL',
+      [channelId]
+    );
+
+    if (channelRows.length === 0)
+      return res.status(404).json({ error: 'Channel not found' });
+
+    const channel = channelRows[0];
+
+    // Access Check
+    if (channel.owner_id !== req.user.id) {
+      const [member] = await db.execute(
+        'SELECT * FROM channel_user WHERE channel_id = ? AND user_id = ?',
+        [channelId, req.user.id]
+      );
+
+      if (member.length === 0)
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const [announcements] = await db.execute(
+      `SELECT a.*, u.name AS creator_name 
+       FROM announcements a 
+       JOIN users u ON a.user_id = u.id
+       WHERE a.channel_id = ?
+       ORDER BY pinned DESC, created_at DESC`,
+      [channelId]
+    );
+
+    res.json(announcements);
+  } catch (err) {
+    console.error("Announcements load error:", err);
+    res.status(500).json({ error: "Failed to load announcements" });
+  }
+});
+
+
+// Create announcement
+app.post('/api/channels/:id/announcements', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== "teacher")
+      return res.status(403).json({ error: "Only teacher can post announcements" });
+
+    const channelId = req.params.id;
+    const { title, message } = req.body;
+
+    if (!title || !message)
+      return res.status(400).json({ error: "Title and message required" });
+
+    const [channel] = await db.execute(
+      'SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL',
+      [channelId]
+    );
+
+    if (channel.length === 0)
+      return res.status(404).json({ error: "Channel not found" });
+
+    if (channel[0].owner_id !== req.user.id)
+      return res.status(403).json({ error: "Only channel owner can post" });
+
+    await db.execute(
+      `INSERT INTO announcements (channel_id, user_id, title, message, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NOW(), NOW())`,
+      [channelId, req.user.id, title, message]
+    );
+
+    res.json({ message: "Announcement posted" });
+
+  } catch (err) {
+    console.error("Create announcement error:", err);
+    res.status(500).json({ error: "Failed to post announcement" });
+  }
+});
+
+
+// Edit announcement
+app.put('/api/announcements/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { title, message } = req.body;
+
+    const [[announcement]] = await db.execute(
+      "SELECT * FROM announcements WHERE id = ?",
+      [id]
+    );
+
+    if (!announcement)
+      return res.status(404).json({ error: "Announcement not found" });
+
+    const [[channel]] = await db.execute(
+      "SELECT * FROM channels WHERE id = ?",
+      [announcement.channel_id]
+    );
+
+    if (channel.owner_id !== req.user.id)
+      return res.status(403).json({ error: "Only owner can edit announcements" });
+
+    await db.execute(
+      `UPDATE announcements 
+       SET title=?, message=?, updated_at = NOW()
+       WHERE id=?`,
+      [title, message, id]
+    );
+
+    res.json({ message: "Announcement updated" });
+
+  } catch (err) {
+    console.error("Update announcement error:", err);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
+
+
+// Delete announcement
+app.delete('/api/announcements/:id', authenticateToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const [[announcement]] = await db.execute(
+      "SELECT * FROM announcements WHERE id = ?",
+      [id]
+    );
+
+    if (!announcement)
+      return res.status(404).json({ error: "Announcement not found" });
+
+    const [[channel]] = await db.execute(
+      "SELECT * FROM channels WHERE id = ?",
+      [announcement.channel_id]
+    );
+
+    if (channel.owner_id !== req.user.id)
+      return res.status(403).json({ error: "Only owner can delete" });
+
+    await db.execute("DELETE FROM announcements WHERE id = ?", [id]);
+
+    res.json({ message: "Announcement deleted" });
+
+  } catch (err) {
+    console.error("Delete announcement error:", err);
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
+
+
+// Pin / Unpin
+app.put('/api/announcements/:id/pin', authenticateToken, async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const [[announcement]] = await db.execute(
+      "SELECT * FROM announcements WHERE id = ?",
+      [id]
+    );
+
+    if (!announcement)
+      return res.status(404).json({ error: "Announcement not found" });
+
+    const [[channel]] = await db.execute(
+      "SELECT * FROM channels WHERE id = ?",
+      [announcement.channel_id]
+    );
+
+    if (channel.owner_id !== req.user.id)
+      return res.status(403).json({ error: "Only owner can pin" });
+
+    const newPin = announcement.pinned ? 0 : 1;
+
+    await db.execute(
+      "UPDATE announcements SET pinned = ? WHERE id = ?",
+      [newPin, id]
+    );
+
+    res.json({ message: newPin ? "Pinned" : "Unpinned" });
+
+  } catch (err) {
+    console.error("Pin announcement error:", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+app.get("/api/announcements/unread", authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      `SELECT a.*, c.title AS channel_name
+       FROM announcements a
+       JOIN channels c ON c.id = a.channel_id
+       
+       -- ensure user belongs to the channel
+       JOIN channel_user cu 
+         ON cu.channel_id = a.channel_id 
+         AND cu.user_id = ?
+       
+       LEFT JOIN announcement_reads r 
+         ON a.id = r.announcement_id 
+         AND r.user_id = ?
+       
+       WHERE r.id IS NULL
+       AND a.deleted_at IS NULL
+       ORDER BY a.created_at DESC
+       LIMIT 1`,
+      [req.user.id, req.user.id]
+    );
+
+    res.json(rows.length ? rows[0] : null);
+  } catch (err) {
+    console.error("Unread announcement error:", err);
+    res.status(500).json({ error: "Failed to load announcement" });
+  }
+});
+
+
+
+app.post("/api/announcements/:id/read", authenticateToken, async (req, res) => {
+  try {
+    await db.execute(
+      `INSERT INTO announcement_reads (announcement_id, user_id)
+       VALUES (?, ?)`,
+      [req.params.id, req.user.id]
+    );
+
+    res.json({ message: "marked as read" });
+  } catch (err) {
+    console.error("Mark read error:", err);
+    res.status(500).json({ error: "Failed to mark as read" });
+  }
+});
+
+
+
+
+
 
 // Start server
 createConnection().then(() => {

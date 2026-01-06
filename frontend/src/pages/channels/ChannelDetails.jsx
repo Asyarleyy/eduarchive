@@ -17,6 +17,12 @@ export default function ChannelShow() {
   const [showMembers, setShowMembers] = useState(false);
 
   const [previewMaterial, setPreviewMaterial] = useState(null);
+  const [editMaterial, setEditMaterial] = useState(null);
+const [editForm, setEditForm] = useState({
+  title: "",
+  description: ""
+});
+
 
   const [uploadForm, setUploadForm] = useState({
     title: "",
@@ -24,10 +30,20 @@ export default function ChannelShow() {
     file: null,
   });
 
+  const [announcements, setAnnouncements] = useState([]);
+const [newAnnouncement, setNewAnnouncement] = useState({
+  title: "",
+  message: ""
+});
+const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
+
+
   // ================= LOAD DATA =================
   useEffect(() => {
     fetchChannel();
     fetchMaterials();
+    fetchAnnouncements();
+
   }, [id]);
 
   const fetchChannel = async () => {
@@ -49,6 +65,30 @@ export default function ChannelShow() {
       setLoading(false);
     }
   };
+
+  const fetchAnnouncements = async () => {
+  try {
+    const res = await axios.get(`/api/channels/${id}/announcements`);
+    setAnnouncements(res.data);
+  } catch {
+    console.error("Announcements load error");
+  }
+};
+
+const createAnnouncement = async (e) => {
+  e.preventDefault();
+
+  try {
+    await axios.post(`/api/channels/${id}/announcements`, newAnnouncement);
+    alert("Announcement posted!");
+    setShowAnnouncementForm(false);
+    setNewAnnouncement({ title: "", message: "" });
+    fetchAnnouncements();
+  } catch {
+    alert("Failed to post announcement");
+  }
+};
+
 
   const fetchMembers = async () => {
     try {
@@ -134,6 +174,42 @@ export default function ChannelShow() {
       alert("Delete failed");
     }
   };
+
+  const openEdit = (m) => {
+  setEditMaterial(m);
+  setEditForm({
+    title: m.title,
+    description: m.description || ""
+  });
+};
+
+const updateMaterial = async (e) => {
+  e.preventDefault();
+
+  try {
+    const formData = new FormData();
+    formData.append("title", editForm.title);
+    formData.append("description", editForm.description);
+
+    if (editForm.file) {
+      formData.append("file", editForm.file);
+    }
+
+    await axios.post(`/api/materials/${editMaterial.id}/update`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    alert("Material updated successfully");
+    setEditMaterial(null);
+    fetchMaterials();
+
+  } catch (err) {
+    console.error(err);
+    alert("Update failed");
+  }
+};
+
+
 
   if (loading) return <div className="text-white p-5">Loading...</div>;
 
@@ -252,6 +328,72 @@ export default function ChannelShow() {
             ))}
           </div>
         )}
+
+        <h4 className="text-white mt-5">Announcements</h4>
+
+{user?.role === "teacher" && (
+  <>
+    <button
+      className="btn btn-primary mb-3"
+      onClick={() => setShowAnnouncementForm(!showAnnouncementForm)}
+    >
+      {showAnnouncementForm ? "Cancel" : "+ New Announcement"}
+    </button>
+
+    {showAnnouncementForm && (
+      <div className="card mb-3">
+        <div className="card-body">
+          <form onSubmit={createAnnouncement}>
+            <input
+              className="form-control mb-2"
+              placeholder="Title"
+              value={newAnnouncement.title}
+              onChange={(e) =>
+                setNewAnnouncement({ ...newAnnouncement, title: e.target.value })
+              }
+              required
+            />
+
+            <textarea
+              className="form-control mb-2"
+              rows={3}
+              placeholder="Message"
+              value={newAnnouncement.message}
+              onChange={(e) =>
+                setNewAnnouncement({ ...newAnnouncement, message: e.target.value })
+              }
+              required
+            />
+
+            <button className="btn btn-primary">Post</button>
+          </form>
+        </div>
+      </div>
+    )}
+  </>
+)}
+
+{announcements.length === 0 ? (
+  <div className="card">
+    <div className="card-body text-muted">
+      No announcements yet.
+    </div>
+  </div>
+) : (
+  <div className="card">
+    <div className="card-body">
+      {announcements.map(a => (
+        <div key={a.id} className="mb-3 border-bottom pb-2">
+          <h5 className="text-white">{a.title}</h5>
+          <p className="text-muted">{a.message}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+
+
       </div>
 
       {/* ================= PREVIEW POPUP ================= */}
@@ -293,6 +435,12 @@ export default function ChannelShow() {
                     >
                       Delete
                     </button>
+                    <button
+      className="btn btn-warning w-100 mb-2"
+      onClick={() => openEdit(previewMaterial)}
+    >
+      Edit
+    </button>
                   </>
                 )}
 
@@ -303,11 +451,75 @@ export default function ChannelShow() {
                   Close
                 </button>
 
+
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {editMaterial && (
+  <div className="popup-backdrop">
+    <div className="card p-4" style={{ minWidth: "450px" }}>
+      <h4 className="text-white mb-3">Edit Material</h4>
+
+      <form onSubmit={updateMaterial}>
+        <div className="mb-3">
+          <label className="form-label">Title</label>
+          <input
+            className="form-control"
+            value={editForm.title}
+            onChange={(e) =>
+              setEditForm({ ...editForm, title: e.target.value })
+            }
+            required
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label">Description</label>
+          <textarea
+            className="form-control"
+            value={editForm.description}
+            onChange={(e) =>
+              setEditForm({ ...editForm, description: e.target.value })
+            }
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label">
+            Replace File (optional)
+          </label>
+          <input
+            type="file"
+            className="form-control"
+            onChange={(e) =>
+              setEditForm({ ...editForm, file: e.target.files[0] })
+            }
+          />
+          <small className="text-muted">
+            Leave empty if you don't want to change the file.
+          </small>
+        </div>
+
+        <button className="btn btn-primary me-2" type="submit">
+          Save
+        </button>
+
+        <button
+          className="btn btn-secondary"
+          onClick={() => setEditMaterial(null)}
+          type="button"
+        >
+          Cancel
+        </button>
+      </form>
+    </div>
+  </div>
+)}
+
+
 
       {showCodePopup && (
   <div className="popup-backdrop">

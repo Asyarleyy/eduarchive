@@ -7,14 +7,10 @@ export default function Dashboard() {
     const { user } = useAuth();
     const [channels, setChannels] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [latestAnnouncement, setLatestAnnouncement] = useState(null);
+    const [showPopup, setShowPopup] = useState(false);
+    
 
-    useEffect(() => {
-        if (user?.role === 'teacher') {
-            fetchChannels();
-        } else {
-            fetchJoinedChannels();
-        }
-    }, [user]);
 
     const fetchChannels = async () => {
         try {
@@ -26,6 +22,29 @@ export default function Dashboard() {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+    if (user?.role === 'teacher') {
+        fetchChannels();
+    } else {
+        fetchJoinedChannels();
+        fetchLatestAnnouncement();
+    }
+}, [user]);
+
+const fetchLatestAnnouncement = async () => {
+  try {
+    const res = await axios.get("/api/announcements/unread");
+    if (res.data) {
+      setLatestAnnouncement(res.data);
+      setShowPopup(true);
+    }
+  } catch (err) {
+    console.error("Announcement load failed");
+  }
+};
+
+
 
     const fetchJoinedChannels = async () => {
         try {
@@ -136,6 +155,37 @@ export default function Dashboard() {
                     </>
                 )}
             </div>
+            {showPopup && latestAnnouncement && (
+  <div className="popup-backdrop">
+    <div className="card p-4 text-center" style={{ minWidth: "500px" }}>
+
+      <span className="badge bg-primary mb-2">
+        {latestAnnouncement.channel_name}
+      </span>
+
+      <h4 className="text-white mb-2">
+        {latestAnnouncement.title}
+      </h4>
+
+      <p className="text-muted">
+        {latestAnnouncement.message}
+      </p>
+
+      <button
+        className="btn btn-secondary mt-3"
+        onClick={async () => {
+          await axios.post(`/api/announcements/${latestAnnouncement.id}/read`);
+          setShowPopup(false);
+        }}
+      >
+        Close
+      </button>
+
+    </div>
+  </div>
+)}
+
+
         </div>
     );
 }

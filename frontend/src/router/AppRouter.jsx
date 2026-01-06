@@ -10,6 +10,8 @@ import TeacherChannels from "../pages/channels/TeacherChannels";
 import CreateChannel from "../pages/channels/CreateChannel";
 import ChannelDetails from "../pages/channels/ChannelDetails";
 
+import Announcements from "../pages/channels/Announcements";
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -30,6 +32,7 @@ export default function AppRouter() {
 
         {/* Default */}
         <Route path="*" element={<Dashboard />} />
+        <Route path="/announcements" element={<Announcements />} />
 
       </Routes>
     </BrowserRouter>
