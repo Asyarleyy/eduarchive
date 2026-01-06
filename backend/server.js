@@ -13,1093 +13,123 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true
-}));
+// 1. MIDDLEWARE
+app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Create uploads directory if not exists
-const uploadsDir = path.join(__dirname, 'uploads', 'materials');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Multer configuration for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
+// Ensure directories exist
+const dirs = ['uploads/materials', 'uploads/profile'];
+dirs.forEach(dir => {
+    const fullPath = path.join(__dirname, dir);
+    if (!fs.existsSync(fullPath)) fs.mkdirSync(fullPath, { recursive: true });
 });
 
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /pdf|doc|docx|ppt|pptx|jpg|jpeg|png/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF, DOC, DOCX, PPT, PPTX, JPG, JPEG, PNG are allowed.'));
-    }
-  }
+// 2. MULTER CONFIGURATIONS (Defined only ONCE at the top)
+const materialStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads/materials')),
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
 });
-
-// Database connection
-let db;
-const createConnection = async () => {
-  try {
-    // Parse port as integer (important: .env values are strings)
-    const dbPort = process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306;
-    
-    console.log('🔌 Connecting to MySQL...');
-    console.log(`   Host: ${process.env.DB_HOST || '127.0.0.1'}`);
-    console.log(`   Port: ${dbPort}`);
-    console.log(`   Database: ${process.env.DB_NAME || 'eduarchive_db'}\n`);
-    
-    db = await mysql.createConnection({
-      host: process.env.DB_HOST || '127.0.0.1',
-      port: dbPort,
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'eduarchive_db',
-    });
-    console.log('✅ Connected to MySQL database');
-  } catch (error) {
-    console.error('❌ Database connection error:', error);
-    process.exit(1);
-  }
-};
-
-// Auth middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
-    }
-    req.user = user;
-    next();
-  });
-};
-
-// Routes
-
-// Auth Routes
-app.post('/api/register', async (req, res) => {
-  try {
-    const { name, email, password, role = 'student', school } = req.body;
-
-    // Validation
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
-
-    // Check if user exists
-    const [existing] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing.length > 0) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Insert user
-    const [result] = await db.execute(
-      'INSERT INTO users (name, email, password, role, school, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
-      [name, email, hashedPassword, role, school || null]
-    );
-
-    // Generate token
-    const token = jwt.sign(
-      { id: result.insertId, email, role },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '7d' }
-    );
-
-    res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: { id: result.insertId, name, email, role, school: school || null }
-    });
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ error: error.message || 'Internal server error' });
-  }
-});
-
-app.use("/uploads", express.static("uploads"));
-
-
-app.post('/api/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
-    }
-
-    // Find user
-    const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-    if (users.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const user = users[0];
-
-    // Verify password
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Generate token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      message: 'Login successful',
-      token,
-      user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          school: user.school,
-          profile_image: user.profile_image
-        } 
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.get('/api/user', authenticateToken, async (req, res) => {
-  try {
-    const [users] = await db.execute('SELECT id, name, email, role, school, profile_image FROM users WHERE id = ?',[req.user.id]);
-
-    if (users.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const user = users[0];
-    res.json({ user });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Channel Routes
-app.get('/api/channels', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role === 'teacher') {
-      const [channels] = await db.execute(
-        'SELECT * FROM channels WHERE owner_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
-        [req.user.id]
-      );
-      res.json(channels);
-    } else {
-      res.status(403).json({ error: 'Only teachers can view their channels' });
-    }
-  } catch (error) {
-    console.error('Get channels error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.get('/api/channels/joined', authenticateToken, async (req, res) => {
-  try {
-    const [channels] = await db.execute(
-      `SELECT c.* FROM channels c
-       INNER JOIN channel_user cu ON c.id = cu.channel_id
-       WHERE cu.user_id = ? AND c.deleted_at IS NULL
-       ORDER BY c.created_at DESC`,
-      [req.user.id]
-    );
-    res.json(channels);
-  } catch (error) {
-    console.error('Get joined channels error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/channels', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== 'teacher') {
-      return res.status(403).json({ error: 'Only teachers can create channels' });
-    }
-
-    const { name, description } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: 'Channel name is required' });
-    }
-
-    // Generate slug
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-    let uniqueSlug = slug;
-    let counter = 1;
-
-    // Ensure slug is unique
-    while (true) {
-      const [existing] = await db.execute('SELECT id FROM channels WHERE slug = ?', [uniqueSlug]);
-      if (existing.length === 0) break;
-      uniqueSlug = `${slug}-${counter}`;
-      counter++;
-    }
-
-    // Generate access code
-    const accessCode = Math.random().toString(36).substring(2, 12).toUpperCase();
-
-    const [result] = await db.execute(
-      `INSERT INTO channels (owner_id, title, slug, description, access_code, is_public, subscriber_count, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 0, 0, NOW(), NOW())`,
-      [req.user.id, name, uniqueSlug, description || null, accessCode]
-    );
-
-    const [channel] = await db.execute('SELECT * FROM channels WHERE id = ?', [result.insertId]);
-    res.status(201).json(channel[0]);
-  } catch (error) {
-    console.error('Create channel error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.get('/api/channels/:id', authenticateToken, async (req, res) => {
-  try {
-    const [channels] = await db.execute('SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
-    if (channels.length === 0) {
-      return res.status(404).json({ error: 'Channel not found' });
-    }
-
-    const channel = channels[0];
-
-    // Check access
-    if (channel.owner_id !== req.user.id) {
-      const [members] = await db.execute('SELECT * FROM channel_user WHERE channel_id = ? AND user_id = ?', [req.params.id, req.user.id]);
-      if (members.length === 0) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-
-    // Get materials
-    const [materials] = await db.execute(
-      'SELECT * FROM materials WHERE channel_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
-      [req.params.id]
-    );
-
-    channel.materials = materials;
-    res.json(channel);
-  } catch (error) {
-    console.error('Get channel error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/channels/join', authenticateToken, async (req, res) => {
-  try {
-    const { invite_code } = req.body;
-    if (!invite_code) {
-      return res.status(400).json({ error: 'Access code is required' });
-    }
-
-    const [channels] = await db.execute('SELECT * FROM channels WHERE access_code = ? AND deleted_at IS NULL', [invite_code]);
-    if (channels.length === 0) {
-      return res.status(404).json({ error: 'Invalid access code' });
-    }
-
-    const channel = channels[0];
-
-    // Check if already joined
-    const [existing] = await db.execute('SELECT * FROM channel_user WHERE channel_id = ? AND user_id = ?', [channel.id, req.user.id]);
-    if (existing.length > 0) {
-      return res.json({ message: 'Already joined this channel', channel });
-    }
-
-    // Join channel
-    await db.execute(
-      'INSERT INTO channel_user (channel_id, user_id, role, joined_at, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW(), NOW())',
-      [channel.id, req.user.id, 'member']
-    );
-
-    // Increment subscriber count
-    await db.execute('UPDATE channels SET subscriber_count = subscriber_count + 1 WHERE id = ?', [channel.id]);
-
-    res.json({ message: 'Successfully joined channel', channel });
-  } catch (error) {
-    console.error('Join channel error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Material Routes
-app.get('/api/channels/:id/materials', authenticateToken, async (req, res) => {
-  try {
-    const channelId = req.params.id;
-
-    // Check access
-    const [channels] = await db.execute('SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL', [channelId]);
-    if (channels.length === 0) {
-      return res.status(404).json({ error: 'Channel not found' });
-    }
-
-    const channel = channels[0];
-    if (channel.owner_id !== req.user.id) {
-      const [members] = await db.execute('SELECT * FROM channel_user WHERE channel_id = ? AND user_id = ?', [channelId, req.user.id]);
-      if (members.length === 0) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-
-    const [materials] = await db.execute(
-      'SELECT * FROM materials WHERE channel_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
-      [channelId]
-    );
-
-    res.json(materials);
-  } catch (error) {
-    console.error('Get materials error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/channels/:id/materials', authenticateToken, upload.single('file'), async (req, res) => {
-  try {
-    const channelId = req.params.id;
-
-    if (!req.file) {
-      return res.status(400).json({ error: 'File is required' });
-    }
-
-    // Check if user is channel owner
-    const [channels] = await db.execute('SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL', [channelId]);
-    if (channels.length === 0) {
-      return res.status(404).json({ error: 'Channel not found' });
-    }
-
-    const channel = channels[0];
-    if (channel.owner_id !== req.user.id) {
-      return res.status(403).json({ error: 'Only channel owner can upload materials' });
-    }
-
-    const { title, description, subject_id, level, year } = req.body;
-
-    const filePath = `/uploads/materials/${req.file.filename}`;
-    const fileSize = req.file.size;
-    const fileMime = req.file.mimetype;
-
-    const [result] = await db.execute(
-      `INSERT INTO materials (channel_id, uploaded_by, subject_id, title, description, file_path, file_name, file_mime, file_size, level, year, is_public, is_approved, download_count, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, NOW(), NOW())`,
-      [channelId, req.user.id, subject_id || null, title, description || null, filePath, req.file.originalname, fileMime, fileSize, level || null, year || null]
-    );
-
-    const [material] = await db.execute('SELECT * FROM materials WHERE id = ?', [result.insertId]);
-    res.status(201).json(material[0]);
-  } catch (error) {
-    console.error('Upload material error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.get('/api/channels/:id/members', authenticateToken, async (req, res) => {
-  try {
-    const channelId = req.params.id;
-
-    const [channels] = await db.execute(
-      'SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL',
-      [channelId]
-    );
-
-    if (channels.length === 0) {
-      return res.status(404).json({ error: 'Channel not found' });
-    }
-
-    const channel = channels[0];
-
-    if (channel.owner_id !== req.user.id) {
-      return res.status(403).json({ error: 'Only owner can view members' });
-    }
-
-    const [members] = await db.execute(
-  `SELECT users.id, users.name, users.email, cu.joined_at
-   FROM channel_user cu
-   JOIN users ON cu.user_id = users.id
-   WHERE cu.channel_id = ? AND users.id != ?`,
-  [channelId, channel.owner_id]
-);
-
-
-    res.json(members);
-
-  } catch (error) {
-    console.error('Get members error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.delete('/api/channels/:id/members/:userId', authenticateToken, async (req, res) => {
-  try {
-    const channelId = req.params.id;
-    const userId = req.params.userId;
-
-    const [channels] = await db.execute(
-      'SELECT * FROM channels WHERE id = ?',
-      [channelId]
-    );
-
-    if (channels.length === 0) {
-      return res.status(404).json({ error: 'Channel not found' });
-    }
-
-    const channel = channels[0];
-
-    if (channel.owner_id !== req.user.id) {
-      return res.status(403).json({ error: 'Only owner can remove students' });
-    }
-
-    await db.execute(
-      'DELETE FROM channel_user WHERE channel_id = ? AND user_id = ?',
-      [channelId, userId]
-    );
-
-    await db.execute(
-      'UPDATE channels SET subscriber_count = subscriber_count - 1 WHERE id = ?',
-      [channelId]
-    );
-
-    res.json({ message: 'Student removed successfully' });
-
-  } catch (error) {
-    console.error('Remove member error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.delete('/api/channels/:id', authenticateToken, async (req, res) => {
-  try {
-    const channelId = req.params.id;
-
-    const [channels] = await db.execute(
-      'SELECT * FROM channels WHERE id = ?',
-      [channelId]
-    );
-
-    if (channels.length === 0) {
-      return res.status(404).json({ error: 'Channel not found' });
-    }
-
-    const channel = channels[0];
-
-    if (channel.owner_id !== req.user.id) {
-      return res.status(403).json({ error: 'Only channel owner can delete channel' });
-    }
-
-    await db.execute(
-      'UPDATE channels SET deleted_at = NOW() WHERE id = ?',
-      [channelId]
-    );
-
-    res.json({ message: 'Channel deleted successfully' });
-
-  } catch (error) {
-    console.error('Delete channel error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-
-app.get('/api/materials/:id/download', authenticateToken, async (req, res) => {
-  try {
-    const materialId = req.params.id;
-
-    const [materials] = await db.execute('SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL', [materialId]);
-    if (materials.length === 0) {
-      return res.status(404).json({ error: 'Material not found' });
-    }
-
-    // Check access
-    const [channels] = await db.execute('SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL', [material.channel_id]);
-    if (channels.length === 0) {
-      return res.status(404).json({ error: 'Channel not found' });
-    }
-
-    const channel = channels[0];
-    if (channel.owner_id !== req.user.id) {
-      const [members] = await db.execute('SELECT * FROM channel_user WHERE channel_id = ? AND user_id = ?', [material.channel_id, req.user.id]);
-      if (members.length === 0) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
-    }
-
-    // Increment download count
-    await db.execute('UPDATE materials SET download_count = download_count + 1 WHERE id = ?', [materialId]);
-
-    // Record download
-    await db.execute(
-      'INSERT INTO downloads (material_id, user_id, ip, user_agent, downloaded_at, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW(), NOW())',
-      [materialId, req.user.id, req.ip, req.get('user-agent')]
-    );
-
-    const filePath = path.join(__dirname, material.file_path);
-    res.download(filePath, material.file_name);
-  } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.get('/api/materials/:id/preview', authenticateToken, async (req, res) => {
-  try {
-    const materialId = req.params.id;
-
-    const [materials] = await db.execute(
-      "SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL",
-      [materialId]
-    );
-
-    if (materials.length === 0)
-      return res.status(404).json({ error: "Material not found" });
-
-    const material = materials[0];
-
-    // Check access
-    const [channels] = await db.execute(
-      "SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL",
-      [material.channel_id]
-    );
-
-    const channel = channels[0];
-
-    if (channel.owner_id !== req.user.id) {
-      const [member] = await db.execute(
-        "SELECT * FROM channel_user WHERE channel_id = ? AND user_id = ?",
-        [material.channel_id, req.user.id]
-      );
-
-      if (member.length === 0)
-        return res.status(403).json({ error: "Access denied" });
-    }
-
-    const filePath = path.join(__dirname, material.file_path);
-    res.setHeader("Content-Disposition", "inline");
-    res.setHeader("Content-Type", material.file_mime);
-
-    res.sendFile(filePath);
-
-  } catch (err) {
-    console.error("Preview error:", err);
-    res.status(500).json({ error: "Preview failed" });
-  }
-});
-
-
-app.delete('/api/materials/:id', authenticateToken, async (req, res) => {
-  try {
-    const materialId = req.params.id;
-
-    const [materials] = await db.execute(
-      'SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL',
-      [materialId]
-    );
-
-    if (materials.length === 0) {
-      return res.status(404).json({ error: 'Material not found' });
-    }
-
-    const material = materials[0];
-
-    // check owner
-    const [channels] = await db.execute(
-      'SELECT * FROM channels WHERE id = ?',
-      [material.channel_id]
-    );
-
-    const channel = channels[0];
-
-    if (channel.owner_id !== req.user.id) {
-      return res.status(403).json({ error: 'Only channel owner can delete materials' });
-    }
-
-    // Soft delete
-    await db.execute(
-      'UPDATE materials SET deleted_at = NOW() WHERE id = ?',
-      [materialId]
-    );
-
-    res.json({ message: 'Material deleted successfully' });
-
-  } catch (error) {
-    console.error('Delete material error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.put('/api/materials/:id', authenticateToken, async (req, res) => {
-  try {
-    const materialId = req.params.id;
-    const { title, description } = req.body;
-
-    const [materials] = await db.execute(
-      'SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL',
-      [materialId]
-    );
-
-    if (materials.length === 0) {
-      return res.status(404).json({ error: 'Material not found' });
-    }
-
-    const material = materials[0];
-
-    const [channels] = await db.execute(
-      'SELECT * FROM channels WHERE id = ?',
-      [material.channel_id]
-    );
-
-    const channel = channels[0];
-
-    if (channel.owner_id !== req.user.id) {
-      return res.status(403).json({ error: 'Only channel owner can edit materials' });
-    }
-
-    await db.execute(
-      `UPDATE materials 
-       SET title = ?, description = ?, updated_at = NOW() 
-       WHERE id = ?`,
-      [title, description || null, materialId]
-    );
-
-    res.json({ message: 'Material updated successfully' });
-
-  } catch (error) {
-    console.error('Update material error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post("/api/materials/:id/update",
-  authenticateToken,
-  upload.single("file"),
-  async (req, res) => {
-    try {
-      const id = req.params.id;
-      const { title, description } = req.body;
-
-      const [[material]] = await db.execute(
-        "SELECT * FROM materials WHERE id = ? AND deleted_at IS NULL",
-        [id]
-      );
-
-      if (!material) return res.status(404).json({ error: "Material not found" });
-
-      let filePath = material.file_path;
-      let fileMime = material.file_mime;
-      let fileName = material.file_name;
-
-      if (req.file) {
-        filePath = `/uploads/materials/${req.file.filename}`;
-        fileMime = req.file.mimetype;
-        fileName = req.file.originalname;
-      }
-
-      await db.execute(
-        `UPDATE materials 
-         SET title=?, description=?, file_path=?, file_mime=?, file_name=?, updated_at = NOW()
-         WHERE id=?`,
-        [title, description, filePath, fileMime, fileName, id]
-      );
-
-      res.json({ message: "Material updated" });
-    } catch (err) {
-      console.error("Update material error:", err);
-      res.status(500).json({ error: "Update failed" });
-    }
-  }
-);
-
-//update profile
-app.put("/api/user/update", authenticateToken, async (req, res) => {
-  try {
-    const { first_name, last_name, gender, birth_date, school, email } = req.body;
-
-    const fullName = `${first_name || ""} ${last_name || ""}`.trim();
-
-    await db.execute(
-      `UPDATE users 
-       SET first_name=?, 
-           last_name=?, 
-           name=?, 
-           gender=?, 
-           birth_date=?, 
-           school=?, 
-           email=?,
-           updated_at = NOW()
-       WHERE id=?`,
-      [
-        first_name || null,
-        last_name || null,
-        fullName || null,
-        gender || null,
-        birth_date || null,
-        school || null,
-        email || null,
-        req.user.id
-      ]
-    );
-
-    const [[updatedUser]] = await db.execute(
-      "SELECT id, first_name, last_name, name, email, role, school, gender, birth_date, profile_image FROM users WHERE id=?",
-      [req.user.id]
-    );
-
-    res.json({
-      message: "Profile updated successfully",
-      user: updatedUser
-    });
-
-  } catch (err) {
-    console.error("Profile update error:", err);
-    res.status(500).json({ error: "Update failed" });
-  }
-});
-
-
-
-
-//update password
-app.put("/api/user/password", authenticateToken, async (req, res) => {
-  try {
-    const { current_password, new_password } = req.body;
-
-    if (!current_password || !new_password)
-      return res.status(400).json({ error: "All fields required" });
-
-    const [[user]] = await db.execute(
-      "SELECT password FROM users WHERE id=?",
-      [req.user.id]
-    );
-
-    const valid = await bcrypt.compare(current_password, user.password);
-    if (!valid) return res.status(400).json({ error: "Current password wrong" });
-
-    const hashed = await bcrypt.hash(new_password, 10);
-
-    await db.execute(
-      "UPDATE users SET password=?, updated_at=NOW() WHERE id=?",
-      [hashed, req.user.id]
-    );
-
-    if(new_password.length < 6)
-    return res.status(400).json({ error: "Password must be at least 6 characters" });
-
-    res.json({ message: "Password updated successfully" });
-  } catch (err) {
-    console.error("Password change error:", err);
-    res.status(500).json({ error: "Password update failed" });
-  }
-});
-
-
-// ================= ANNOUNCEMENTS =================
-
-// Get announcements for channel
-app.get('/api/channels/:id/announcements', authenticateToken, async (req, res) => {
-  try {
-    const channelId = req.params.id;
-
-    const [channelRows] = await db.execute(
-      'SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL',
-      [channelId]
-    );
-
-    if (channelRows.length === 0)
-      return res.status(404).json({ error: 'Channel not found' });
-
-    const channel = channelRows[0];
-
-    // Access Check
-    if (channel.owner_id !== req.user.id) {
-      const [member] = await db.execute(
-        'SELECT * FROM channel_user WHERE channel_id = ? AND user_id = ?',
-        [channelId, req.user.id]
-      );
-
-      if (member.length === 0)
-        return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const [announcements] = await db.execute(
-      `SELECT a.*, u.name AS creator_name 
-       FROM announcements a 
-       JOIN users u ON a.user_id = u.id
-       WHERE a.channel_id = ?
-       ORDER BY pinned DESC, created_at DESC`,
-      [channelId]
-    );
-
-    res.json(announcements);
-  } catch (err) {
-    console.error("Announcements load error:", err);
-    res.status(500).json({ error: "Failed to load announcements" });
-  }
-});
-
-
-// Create announcement
-app.post('/api/channels/:id/announcements', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.role !== "teacher")
-      return res.status(403).json({ error: "Only teacher can post announcements" });
-
-    const channelId = req.params.id;
-    const { title, message } = req.body;
-
-    if (!title || !message)
-      return res.status(400).json({ error: "Title and message required" });
-
-    const [channel] = await db.execute(
-      'SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL',
-      [channelId]
-    );
-
-    if (channel.length === 0)
-      return res.status(404).json({ error: "Channel not found" });
-
-    if (channel[0].owner_id !== req.user.id)
-      return res.status(403).json({ error: "Only channel owner can post" });
-
-    await db.execute(
-      `INSERT INTO announcements (channel_id, user_id, title, message, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NOW(), NOW())`,
-      [channelId, req.user.id, title, message]
-    );
-
-    res.json({ message: "Announcement posted" });
-
-  } catch (err) {
-    console.error("Create announcement error:", err);
-    res.status(500).json({ error: "Failed to post announcement" });
-  }
-});
-
-
-// Edit announcement
-app.put('/api/announcements/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = req.params.id;
-    const { title, message } = req.body;
-
-    const [[announcement]] = await db.execute(
-      "SELECT * FROM announcements WHERE id = ?",
-      [id]
-    );
-
-    if (!announcement)
-      return res.status(404).json({ error: "Announcement not found" });
-
-    const [[channel]] = await db.execute(
-      "SELECT * FROM channels WHERE id = ?",
-      [announcement.channel_id]
-    );
-
-    if (channel.owner_id !== req.user.id)
-      return res.status(403).json({ error: "Only owner can edit announcements" });
-
-    await db.execute(
-      `UPDATE announcements 
-       SET title=?, message=?, updated_at = NOW()
-       WHERE id=?`,
-      [title, message, id]
-    );
-
-    res.json({ message: "Announcement updated" });
-
-  } catch (err) {
-    console.error("Update announcement error:", err);
-    res.status(500).json({ error: "Update failed" });
-  }
-});
-
-
-// Delete announcement
-app.delete('/api/announcements/:id', authenticateToken, async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    const [[announcement]] = await db.execute(
-      "SELECT * FROM announcements WHERE id = ?",
-      [id]
-    );
-
-    if (!announcement)
-      return res.status(404).json({ error: "Announcement not found" });
-
-    const [[channel]] = await db.execute(
-      "SELECT * FROM channels WHERE id = ?",
-      [announcement.channel_id]
-    );
-
-    if (channel.owner_id !== req.user.id)
-      return res.status(403).json({ error: "Only owner can delete" });
-
-    await db.execute("DELETE FROM announcements WHERE id = ?", [id]);
-
-    res.json({ message: "Announcement deleted" });
-
-  } catch (err) {
-    console.error("Delete announcement error:", err);
-    res.status(500).json({ error: "Delete failed" });
-  }
-});
-
-
-// Pin / Unpin
-app.put('/api/announcements/:id/pin', authenticateToken, async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    const [[announcement]] = await db.execute(
-      "SELECT * FROM announcements WHERE id = ?",
-      [id]
-    );
-
-    if (!announcement)
-      return res.status(404).json({ error: "Announcement not found" });
-
-    const [[channel]] = await db.execute(
-      "SELECT * FROM channels WHERE id = ?",
-      [announcement.channel_id]
-    );
-
-    if (channel.owner_id !== req.user.id)
-      return res.status(403).json({ error: "Only owner can pin" });
-
-    const newPin = announcement.pinned ? 0 : 1;
-
-    await db.execute(
-      "UPDATE announcements SET pinned = ? WHERE id = ?",
-      [newPin, id]
-    );
-
-    res.json({ message: newPin ? "Pinned" : "Unpinned" });
-
-  } catch (err) {
-    console.error("Pin announcement error:", err);
-    res.status(500).json({ error: "Failed" });
-  }
-});
-
-app.get("/api/announcements/unread", authenticateToken, async (req, res) => {
-  try {
-    const [rows] = await db.execute(
-      `SELECT a.*, c.title AS channel_name
-       FROM announcements a
-       JOIN channels c ON c.id = a.channel_id
-       
-       -- ensure user belongs to the channel
-       JOIN channel_user cu 
-         ON cu.channel_id = a.channel_id 
-         AND cu.user_id = ?
-       
-       LEFT JOIN announcement_reads r 
-         ON a.id = r.announcement_id 
-         AND r.user_id = ?
-       
-       WHERE r.id IS NULL
-       AND a.deleted_at IS NULL
-       ORDER BY a.created_at DESC
-       LIMIT 1`,
-      [req.user.id, req.user.id]
-    );
-
-    res.json(rows.length ? rows[0] : null);
-  } catch (err) {
-    console.error("Unread announcement error:", err);
-    res.status(500).json({ error: "Failed to load announcement" });
-  }
-});
-
-
-app.post("/api/announcements/:id/read", authenticateToken, async (req, res) => {
-  try {
-    await db.execute(
-      `INSERT INTO announcement_reads (announcement_id, user_id)
-       VALUES (?, ?)`,
-      [req.params.id, req.user.id]
-    );
-
-    res.json({ message: "marked as read" });
-  } catch (err) {
-    console.error("Mark read error:", err);
-    res.status(500).json({ error: "Failed to mark as read" });
-  }
-});
+const upload = multer({ storage: materialStorage });
 
 const profileStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, "uploads/profile");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
+    destination: (req, file, cb) => cb(null, path.join(__dirname, "uploads/profile")),
+    filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
 });
-
 const uploadProfile = multer({ storage: profileStorage });
 
-app.post("/api/user/profile-image", authenticateToken, uploadProfile.single("image"), async (req, res) => {
-  try {
-    const imagePath = `/uploads/profile/${req.file.filename}`;
+// 3. DATABASE CONNECTION
+let db;
+const createConnection = async () => {
+    try {
+        db = await mysql.createConnection({
+            host: process.env.DB_HOST || '127.0.0.1',
+            port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306,
+            user: process.env.DB_USER || 'root',
+            password: process.env.DB_PASSWORD || '',
+            database: process.env.DB_NAME || 'eduarchive_db',
+        });
+        console.log('✅ Connected to MySQL');
+    } catch (error) {
+        console.error('❌ DB Error:', error);
+        process.exit(1);
+    }
+};
 
-    await db.execute(
-      "UPDATE users SET profile_image=?, updated_at=NOW() WHERE id=?",
-      [imagePath, req.user.id]
-    );
+// 4. AUTH MIDDLEWARE
+const authenticateToken = (req, res, next) => {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Token required' });
+    jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, user) => {
+        if (err) return res.status(403).json({ error: 'Invalid token' });
+        req.user = user;
+        next();
+    });
+};
 
-    res.json({ message: "Profile image updated", profile_image: imagePath });
+// 5. ROUTES
 
-  } catch (err) {
-    console.error("Profile image upload error:", err);
-    res.status(500).json({ error: "Upload failed" });
-  }
+// Unified Register (Fixed 500 error)
+app.post('/api/register', uploadProfile.single('image'), async (req, res) => {
+    try {
+        const { name, first_name, last_name, email, password, role, school, gender, birth_date } = req.body;
+        const [existing] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+        if (existing.length > 0) return res.status(400).json({ error: 'Email already registered' });
+
+        const imagePath = req.file ? `/uploads/profile/${req.file.filename}` : null;
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const [result] = await db.execute(
+            `INSERT INTO users (name, first_name, last_name, email, password, role, school, gender, birth_date, profile_image, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            [name, first_name || null, last_name || null, email, hashedPassword, role, school || null, gender || null, birth_date || null, imagePath]
+        );
+
+        const token = jwt.sign({ id: result.insertId, email, role }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+        const [[newUser]] = await db.execute("SELECT id, name, email, role, profile_image, first_name, last_name, school, gender, birth_date FROM users WHERE id = ?", [result.insertId]);
+        res.status(201).json({ token, user: newUser });
+    } catch (error) { res.status(500).json({ error: 'Register failed' }); }
 });
 
-
-
-
-
-// Start server
-createConnection().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-  });
+// Login
+app.post('/api/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+        const user = users[0];
+        if (!user || !await bcrypt.compare(password, user.password)) return res.status(401).json({ error: 'Invalid credentials' });
+        const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+        res.json({ token, user });
+    } catch (error) { res.status(500).json({ error: 'Login error' }); }
 });
 
+// Profile Update (Unified)
+app.post("/api/user/update", authenticateToken, uploadProfile.single("image"), async (req, res) => {
+    try {
+        const { first_name, last_name, name, gender, birth_date, school, email } = req.body;
+        const [[curr]] = await db.execute("SELECT profile_image FROM users WHERE id=?", [req.user.id]);
+        let imagePath = req.file ? `/uploads/profile/${req.file.filename}` : curr.profile_image;
+        const finalName = name || `${first_name} ${last_name}`.trim();
+
+        await db.execute(
+            `UPDATE users SET first_name=?, last_name=?, name=?, gender=?, birth_date=?, school=?, email=?, profile_image=?, updated_at=NOW() WHERE id=?`,
+            [first_name || null, last_name || null, finalName, gender || null, birth_date || null, school || null, email || null, imagePath, req.user.id]
+        );
+
+        const [[updated]] = await db.execute("SELECT id, first_name, last_name, name, email, role, school, gender, birth_date, profile_image FROM users WHERE id=?", [req.user.id]);
+        res.json({ user: updated });
+    } catch (err) { res.status(500).json({ error: "Update failed" }); }
+});
+
+// Get User
+app.get('/api/user', authenticateToken, async (req, res) => {
+    const [[user]] = await db.execute('SELECT id, first_name, last_name, name, email, role, school, gender, birth_date, profile_image FROM users WHERE id = ?', [req.user.id]);
+    res.json({ user });
+});
+
+// (Add your Channels, Materials, and Announcements routes here...)
+
+createConnection().then(() => app.listen(PORT, () => console.log(`🚀 http://localhost:${PORT}`)));

@@ -523,29 +523,33 @@ const updateMaterial = async (e) => {
 
       {showCodePopup && (
   <div className="popup-backdrop">
-    <div className="card p-4 text-center" style={{ minWidth: "400px" }}>
+    {/* Added glass-card class for consistency */}
+    <div className="card glass-card p-4 text-center" style={{ minWidth: "400px" }}>
       <h4 className="text-white mb-3">Channel Access Code</h4>
 
       <div className="fs-3 fw-bold text-white mb-3 font-monospace">
         {channel.access_code}
       </div>
 
-      <button
-        className="btn btn-primary me-2"
-        onClick={() => {
-          navigator.clipboard.writeText(channel.access_code);
-          alert("Copied!");
-        }}
-      >
-        Copy Code
-      </button>
+      {/* 🟣 UPDATED: Added a container with d-flex, flex-column, and gap-3 */}
+      <div className="d-flex flex-column gap-3 mt-4">
+        <button
+          className="btn btn-primary w-100" // Added w-100 for a professional full-width look
+          onClick={() => {
+            navigator.clipboard.writeText(channel.access_code);
+            alert("Copied!");
+          }}
+        >
+          Copy Code
+        </button>
 
-      <button
-        className="btn btn-secondary"
-        onClick={() => setShowCodePopup(false)}
-      >
-        Close
-      </button>
+        <button
+          className="btn btn-secondary w-100" // Added w-100 to match the top button
+          onClick={() => setShowCodePopup(false)}
+        >
+          Close
+        </button>
+      </div>
     </div>
   </div>
 )}

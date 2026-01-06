@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    // Initial auth check on app load
     useEffect(() => {
         checkAuth();
     }, []);
@@ -33,6 +34,7 @@ export function AuthProvider({ children }) {
                     Authorization: `Bearer ${token}`
                 }
             });
+            // Ensure we handle both response formats: { user: {...} } or {...}
             setUser(response.data.user || response.data);
         } catch (error) {
             console.error('Auth check error:', error);
@@ -48,6 +50,7 @@ export function AuthProvider({ children }) {
             const response = await axios.post('/api/login', { email, password });
             if (response.data.token) {
                 localStorage.setItem('token', response.data.token);
+                // Save the full user object received from login
                 setUser(response.data.user);
                 return { success: true };
             } else {
@@ -71,10 +74,19 @@ export function AuthProvider({ children }) {
 
     const register = async (data) => {
         try {
+            // 'data' now contains: name, first_name, last_name, email, role, school, gender, birth_date
             const response = await axios.post('/api/register', data);
+            
             if (response.data.token) {
                 localStorage.setItem('token', response.data.token);
-                setUser(response.data.user);
+                
+                /**
+                 * 🟣 IMPORTANT FIX: 
+                 * We ensure the user state is set with the COMPLETE data returned 
+                 * from the server so the Profile page displays it immediately.
+                 */
+                setUser(response.data.user); 
+                
                 return { success: true };
             } else {
                 return {
@@ -87,11 +99,12 @@ export function AuthProvider({ children }) {
         } catch (error) {
             console.error('Register error:', error);
             const errorMessage = error.response?.data?.error || error.message || 'Registration failed';
+            
+            // Return structured errors for the Register component to display
             return {
                 success: false,
-                errors: { 
-                    email: [errorMessage],
-                    general: [errorMessage]
+                errors: error.response?.data?.errors || { 
+                    general: [errorMessage] 
                 }
             };
         }
@@ -102,8 +115,10 @@ export function AuthProvider({ children }) {
         setUser(null);
     };
 
+    // The 'value' object makes these variables and functions available to all components
     const value = {
         user,
+        setUser,    // Allows Profile.jsx to manually update state after saving changes
         loading,
         login,
         register,
@@ -113,4 +128,3 @@ export function AuthProvider({ children }) {
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
