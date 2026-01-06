@@ -152,6 +152,9 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+app.use("/uploads", express.static("uploads"));
+
+
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -185,12 +188,13 @@ app.post('/api/login', async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        school: user.school
-      }
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          school: user.school,
+          profile_image: user.profile_image
+        } 
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -200,7 +204,8 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/user', authenticateToken, async (req, res) => {
   try {
-    const [users] = await db.execute('SELECT id, name, email, role, school FROM users WHERE id = ?', [req.user.id]);
+    const [users] = await db.execute('SELECT id, name, email, role, school, profile_image FROM users WHERE id = ?',[req.user.id]);
+
     if (users.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -540,8 +545,6 @@ app.get('/api/materials/:id/download', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Material not found' });
     }
 
-    const material = materials[0];
-
     // Check access
     const [channels] = await db.execute('SELECT * FROM channels WHERE id = ? AND deleted_at IS NULL', [material.channel_id]);
     if (channels.length === 0) {
@@ -740,6 +743,89 @@ app.post("/api/materials/:id/update",
     }
   }
 );
+
+//update profile
+app.put("/api/user/update", authenticateToken, async (req, res) => {
+  try {
+    const { first_name, last_name, gender, birth_date, school, email } = req.body;
+
+    const fullName = `${first_name || ""} ${last_name || ""}`.trim();
+
+    await db.execute(
+      `UPDATE users 
+       SET first_name=?, 
+           last_name=?, 
+           name=?, 
+           gender=?, 
+           birth_date=?, 
+           school=?, 
+           email=?,
+           updated_at = NOW()
+       WHERE id=?`,
+      [
+        first_name || null,
+        last_name || null,
+        fullName || null,
+        gender || null,
+        birth_date || null,
+        school || null,
+        email || null,
+        req.user.id
+      ]
+    );
+
+    const [[updatedUser]] = await db.execute(
+      "SELECT id, first_name, last_name, name, email, role, school, gender, birth_date, profile_image FROM users WHERE id=?",
+      [req.user.id]
+    );
+
+    res.json({
+      message: "Profile updated successfully",
+      user: updatedUser
+    });
+
+  } catch (err) {
+    console.error("Profile update error:", err);
+    res.status(500).json({ error: "Update failed" });
+  }
+});
+
+
+
+
+//update password
+app.put("/api/user/password", authenticateToken, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password)
+      return res.status(400).json({ error: "All fields required" });
+
+    const [[user]] = await db.execute(
+      "SELECT password FROM users WHERE id=?",
+      [req.user.id]
+    );
+
+    const valid = await bcrypt.compare(current_password, user.password);
+    if (!valid) return res.status(400).json({ error: "Current password wrong" });
+
+    const hashed = await bcrypt.hash(new_password, 10);
+
+    await db.execute(
+      "UPDATE users SET password=?, updated_at=NOW() WHERE id=?",
+      [hashed, req.user.id]
+    );
+
+    if(new_password.length < 6)
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+
+    res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    console.error("Password change error:", err);
+    res.status(500).json({ error: "Password update failed" });
+  }
+});
+
 
 // ================= ANNOUNCEMENTS =================
 
@@ -961,7 +1047,6 @@ app.get("/api/announcements/unread", authenticateToken, async (req, res) => {
 });
 
 
-
 app.post("/api/announcements/:id/read", authenticateToken, async (req, res) => {
   try {
     await db.execute(
@@ -977,6 +1062,35 @@ app.post("/api/announcements/:id/read", authenticateToken, async (req, res) => {
   }
 });
 
+const profileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, "uploads/profile");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
+
+const uploadProfile = multer({ storage: profileStorage });
+
+app.post("/api/user/profile-image", authenticateToken, uploadProfile.single("image"), async (req, res) => {
+  try {
+    const imagePath = `/uploads/profile/${req.file.filename}`;
+
+    await db.execute(
+      "UPDATE users SET profile_image=?, updated_at=NOW() WHERE id=?",
+      [imagePath, req.user.id]
+    );
+
+    res.json({ message: "Profile image updated", profile_image: imagePath });
+
+  } catch (err) {
+    console.error("Profile image upload error:", err);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
 
 
 
