@@ -9,7 +9,7 @@ import './css/app.css';
 
 // Setup axios defaults - guna proxy dari vite.config.js
 // axios.defaults.baseURL = 'http://localhost:3001'; // Comment out, guna proxy instead
-axios.defaults.headers.common['Content-Type'] = 'application/json';
+// Do not set a global Content-Type header — let the browser set it for multipart/form-data
 
 // Add token to requests if available
 axios.interceptors.request.use((config) => {

@@ -8,15 +8,17 @@ export default function ChannelShow() {
   const { user } = useAuth();
 
   const [channel, setChannel] = useState(null);
-  const [materials, setMaterials] = useState([]);
-  const [members, setMembers] = useState([]);
+  const [materials, setMaterials] = useState([]); // This will be filled from the channel object
   const [loading, setLoading] = useState(true);
+
+  const [members, setMembers] = useState([]);
 
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [showCodePopup, setShowCodePopup] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
 
   const [previewMaterial, setPreviewMaterial] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [editMaterial, setEditMaterial] = useState(null);
 const [editForm, setEditForm] = useState({
   title: "",
@@ -29,6 +31,7 @@ const [editForm, setEditForm] = useState({
     description: "",
     file: null,
   });
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState(null);
 
   const [announcements, setAnnouncements] = useState([]);
 const [newAnnouncement, setNewAnnouncement] = useState({
@@ -40,29 +43,31 @@ const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
 
   // ================= LOAD DATA =================
   useEffect(() => {
-    fetchChannel();
+    fetchChannelAndMaterials();
     fetchMaterials();
     fetchAnnouncements();
-
   }, [id]);
 
-  const fetchChannel = async () => {
+  const fetchChannelAndMaterials = async () => {
     try {
+      // 🟢 This one call now returns BOTH channel details and the materials array
       const res = await axios.get(`/api/channels/${id}`);
       setChannel(res.data);
-    } catch {
-      console.error("Channel load error");
+      setMaterials(res.data.materials || []); // Extract materials from the main object
+    } catch (err) {
+      console.error("Data load error");
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Separate materials fetch used by upload/delete/update flows
   const fetchMaterials = async () => {
     try {
       const res = await axios.get(`/api/channels/${id}/materials`);
       setMaterials(res.data);
-    } catch {
-      console.error("Materials load error");
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error('Materials load error', err);
     }
   };
 
@@ -126,12 +131,12 @@ const createAnnouncement = async (e) => {
 
   // ================= UPLOAD =================
   const handleUpload = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
 
     const formData = new FormData();
-    formData.append("title", uploadForm.title);
-    formData.append("description", uploadForm.description || "");
-    formData.append("file", uploadForm.file);
+formData.append("title", uploadForm.title);
+formData.append("description", uploadForm.description);
+formData.append("file", uploadForm.file);
 
     try {
       await axios.post(`/api/channels/${id}/materials`, formData, {
@@ -141,8 +146,10 @@ const createAnnouncement = async (e) => {
       setShowUploadForm(false);
       setUploadForm({ title: "", description: "", file: null });
       fetchMaterials();
-    } catch {
-      alert("Upload failed");
+    } catch (err) {
+      console.error('UPLOAD ERROR', err);
+      const message = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Upload failed';
+      alert(`Upload failed: ${message}`);
     }
   };
 
@@ -174,6 +181,51 @@ const createAnnouncement = async (e) => {
       alert("Delete failed");
     }
   };
+
+  // Load preview via authenticated fetch and serve as blob URL to iframe
+  useEffect(() => {
+    let activeUrl = null;
+    const loadPreview = async () => {
+      if (!previewMaterial) return setPreviewUrl(null);
+
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/materials/${previewMaterial.id}/preview`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || res.statusText);
+        }
+
+        const blob = await res.blob();
+        activeUrl = URL.createObjectURL(blob);
+        setPreviewUrl(activeUrl);
+      } catch (err) {
+        console.error('Preview load failed', err);
+        alert('Preview failed: ' + (err.message || 'Unable to load preview'));
+        setPreviewMaterial(null);
+      }
+    };
+
+    loadPreview();
+
+    return () => {
+      if (activeUrl) URL.revokeObjectURL(activeUrl);
+      setPreviewUrl(null);
+    };
+  }, [previewMaterial]);
+
+  // Cleanup upload preview object URL when it changes/unmounts
+  useEffect(() => {
+    return () => {
+      if (uploadPreviewUrl) {
+        URL.revokeObjectURL(uploadPreviewUrl);
+        setUploadPreviewUrl(null);
+      }
+    };
+  }, [uploadPreviewUrl]);
 
   const openEdit = (m) => {
   setEditMaterial(m);
@@ -293,7 +345,20 @@ const updateMaterial = async (e) => {
                       required
                     />
 
-                    <button className="btn btn-primary mt-3">Upload</button>
+                    <div className="mt-3">
+                      <button type="button" className="btn btn-secondary me-2" onClick={() => {
+                        if (!uploadForm.file) return alert('Please select a file first');
+                        // create preview for the selected file
+                        if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
+                        const url = URL.createObjectURL(uploadForm.file);
+                        setUploadPreviewUrl(url);
+                        setPreviewMaterial(null);
+                      }}>
+                        Preview
+                      </button>
+
+                      <button className="btn btn-primary" type="submit">Upload</button>
+                    </div>
                   </form>
                 </div>
               </div>
@@ -397,60 +462,95 @@ const updateMaterial = async (e) => {
       </div>
 
       {/* ================= PREVIEW POPUP ================= */}
-      {previewMaterial && (
+      {(previewMaterial || uploadPreviewUrl) && (
         <div className="popup-backdrop">
           <div className="card p-4" style={{ minWidth: "900px" }}>
             <div className="row">
-              
+
               {/* LEFT PREVIEW */}
               <div className="col-md-8">
                 <h5 className="text-white mb-3">Preview</h5>
 
-                <iframe
-                  src={`/api/materials/${previewMaterial.id}/preview`}
-                  width="100%"
-                  height="500px"
-                  title="Preview"
-                  style={{ borderRadius: "10px", background: "#000" }}
-                ></iframe>
+                {uploadPreviewUrl ? (
+                  <iframe
+                    src={uploadPreviewUrl}
+                    width="100%"
+                    height="500px"
+                    title="Preview"
+                    style={{ borderRadius: "10px", background: "#000" }}
+                  ></iframe>
+                ) : previewUrl ? (
+                  <iframe
+                    src={previewUrl}
+                    width="100%"
+                    height="500px"
+                    title="Preview"
+                    style={{ borderRadius: "10px", background: "#000" }}
+                  ></iframe>
+                ) : (
+                  <div className="text-muted">Loading preview...</div>
+                )}
               </div>
 
               {/* RIGHT PANEL */}
               <div className="col-md-4">
-                <h4 className="text-white">{previewMaterial.title}</h4>
-                <p className="text-muted">{previewMaterial.description}</p>
+                <h4 className="text-white">{uploadPreviewUrl ? uploadForm.title : previewMaterial?.title}</h4>
+                <p className="text-muted">{uploadPreviewUrl ? uploadForm.description : previewMaterial?.description}</p>
 
-                <button
-                  className="btn btn-primary w-100 mb-2"
-                  onClick={() => handleDownload(previewMaterial)}
-                >
-                  Download
-                </button>
-
-                {user?.role === "teacher" && (
+                {uploadPreviewUrl ? (
                   <>
                     <button
-                      className="btn btn-danger w-100 mb-2"
-                      onClick={() => deleteMaterial(previewMaterial.id)}
+                      className="btn btn-secondary w-100"
+                      onClick={() => {
+                        if (uploadPreviewUrl) {
+                          URL.revokeObjectURL(uploadPreviewUrl);
+                          setUploadPreviewUrl(null);
+                        }
+                      }}
                     >
-                      Delete
+                      Close
                     </button>
+                  </>
+                ) : (
+                  <>
                     <button
-      className="btn btn-warning w-100 mb-2"
-      onClick={() => openEdit(previewMaterial)}
-    >
-      Edit
-    </button>
+                      className="btn btn-primary w-100 mb-2"
+                      onClick={() => handleDownload(previewMaterial)}
+                    >
+                      Download
+                    </button>
+
+                    {user?.role === "teacher" && (
+                      <>
+                        <button
+                          className="btn btn-danger w-100 mb-2"
+                          onClick={() => deleteMaterial(previewMaterial.id)}
+                        >
+                          Delete
+                        </button>
+                        <button
+                          className="btn btn-warning w-100 mb-2"
+                          onClick={() => openEdit(previewMaterial)}
+                        >
+                          Edit
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      className="btn btn-secondary w-100"
+                      onClick={() => {
+                        setPreviewMaterial(null);
+                        if (previewUrl) {
+                          URL.revokeObjectURL(previewUrl);
+                          setPreviewUrl(null);
+                        }
+                      }}
+                    >
+                      Close
+                    </button>
                   </>
                 )}
-
-                <button
-                  className="btn btn-secondary w-100"
-                  onClick={() => setPreviewMaterial(null)}
-                >
-                  Close
-                </button>
-
 
               </div>
             </div>

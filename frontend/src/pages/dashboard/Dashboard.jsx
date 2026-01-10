@@ -9,8 +9,6 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [latestAnnouncement, setLatestAnnouncement] = useState(null);
     const [showPopup, setShowPopup] = useState(false);
-    
-
 
     const fetchChannels = async () => {
         try {
@@ -22,29 +20,27 @@ export default function Dashboard() {
             setLoading(false);
         }
     };
+    
+    const fetchLatestAnnouncement = async () => {
+        try {
+            const res = await axios.get("/api/announcements/unread");
+            if (res.data) {
+                setLatestAnnouncement(res.data);
+                setShowPopup(true);
+            }
+        } catch (err) {
+            console.error("Announcement load failed");
+        }
+    };
 
     useEffect(() => {
-    if (user?.role === 'teacher') {
-        fetchChannels();
-    } else {
-        fetchJoinedChannels();
-        fetchLatestAnnouncement();
-    }
-}, [user]);
-
-const fetchLatestAnnouncement = async () => {
-  try {
-    const res = await axios.get("/api/announcements/unread");
-    if (res.data) {
-      setLatestAnnouncement(res.data);
-      setShowPopup(true);
-    }
-  } catch (err) {
-    console.error("Announcement load failed");
-  }
-};
-
-
+        if (user) {
+            fetchChannels();
+            if (user.role === 'student') {
+                fetchLatestAnnouncement();
+            }
+        }
+    }, [user]);
 
     const fetchJoinedChannels = async () => {
         try {
@@ -119,6 +115,9 @@ const fetchLatestAnnouncement = async () => {
                     <>
                         <div className="d-flex justify-content-between align-items-center mb-4">
                             <h3 className="h4 fw-semibold text-white">My Study Channels</h3>
+                            <Link to="/join" className="btn btn-primary">
+                                + Join Channel
+                            </Link>
                         </div>
 
                         {loading ? (
@@ -127,9 +126,10 @@ const fetchLatestAnnouncement = async () => {
                             <div className="card">
                                 <div className="card-body text-center text-muted">
                                     <p>You haven't joined any channels yet.</p>
-                                    <p className="small mb-0">
+                                    <p className="small mb-3">
                                         Find a teacher's channel to access their materials.
                                     </p>
+                                    <Link to="/join" className="btn btn-primary btn-sm">+ Join Channel</Link>
                                 </div>
                             </div>
                         ) : (
