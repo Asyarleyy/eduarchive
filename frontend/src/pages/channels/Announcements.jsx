@@ -59,15 +59,7 @@ export default function Announcements() {
     }
   };
 
-  // ===== PIN =====
-  const togglePin = async (aid) => {
-    try {
-      await axios.put(`/api/announcements/${aid}/pin`);
-      loadAnnouncements();
-    } catch {
-      alert("Failed");
-    }
-  };
+  // Pin feature removed per request
 
   // ===== EDIT =====
   const startEdit = (a) => {
@@ -153,13 +145,7 @@ export default function Announcements() {
           </div>
         ) : (
           announcements.map((a) => (
-            <div
-              key={a.id}
-              className="card mb-3"
-              style={{
-                borderLeft: a.pinned ? "5px solid gold" : "5px solid transparent"
-              }}
-            >
+            <div key={a.id} className="card mb-3">
               <div className="card-body">
 
                 {editId === a.id ? (
@@ -194,13 +180,16 @@ export default function Announcements() {
                   </>
                 ) : (
                   <>
-                    <h5 className="text-white">
-                      {a.title} {a.pinned && "📌"}
-                    </h5>
+                    <h5 className="text-white">{a.title}</h5>
                     <p className="text-muted">{a.message}</p>
-                    <small className="text-muted">
-                      Posted by: {a.creator_name}
-                    </small>
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <small className="text-muted">
+                        Posted by: {a.creator_name}
+                      </small>
+                      <small className="text-muted">
+                        {new Date(a.created_at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })}
+                      </small>
+                    </div>
 
                     {user?.role === "teacher" && (
                       <div className="mt-2">
@@ -212,17 +201,10 @@ export default function Announcements() {
                         </button>
 
                         <button
-                          className="btn btn-danger btn-sm me-2"
+                          className="btn btn-danger btn-sm"
                           onClick={() => deleteAnnouncement(a.id)}
                         >
                           Delete
-                        </button>
-
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => togglePin(a.id)}
-                        >
-                          {a.pinned ? "Unpin" : "Pin"}
                         </button>
                       </div>
                     )}

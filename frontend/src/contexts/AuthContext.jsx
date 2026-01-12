@@ -62,20 +62,31 @@ export function AuthProvider({ children }) {
         } catch (error) {
             console.error('Login error:', error);
             const errorMessage = error.response?.data?.error || error.message || 'Invalid credentials';
-            return {
+            const errorResponse = {
                 success: false,
                 errors: { 
                     email: [errorMessage],
                     general: [errorMessage]
                 }
             };
+            
+            // If account is deleted, include the reason
+            if (error.response?.data?.reason) {
+                errorResponse.errors.reason = error.response.data.reason;
+            }
+            
+            return errorResponse;
         }
     };
 
     const register = async (data) => {
         try {
-            // 'data' now contains: name, first_name, last_name, email, role, school, gender, birth_date
-            const response = await axios.post('/api/register', data);
+            // 'data' now contains: name, first_name, last_name, email, role, school, gender, birth_date, image, teacher_proof (if teacher)
+            const response = await axios.post('/api/register', data, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
             
             if (response.data.token) {
                 localStorage.setItem('token', response.data.token);
@@ -98,14 +109,18 @@ export function AuthProvider({ children }) {
             }
         } catch (error) {
             console.error('Register error:', error);
-            const errorMessage = error.response?.data?.error || error.message || 'Registration failed';
+            console.error('Error response:', error.response?.data);
+            
+            const errorData = error.response?.data;
+            const errorMessage = errorData?.error || errorData?.message || error.message || 'Registration failed';
             
             // Return structured errors for the Register component to display
             return {
                 success: false,
-                errors: error.response?.data?.errors || { 
+                errors: errorData?.errors || { 
                     general: [errorMessage] 
-                }
+                },
+                message: errorMessage
             };
         }
     };

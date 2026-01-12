@@ -1,12 +1,12 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import GuestLayout from './components/GuestLayout';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ResetPassword from './pages/auth/ResetPassword';
 import Dashboard from './pages/dashboard/Dashboard';
-import TeacherChannels from './pages/channels/TeacherChannels';
 import CreateChannel from './pages/channels/CreateChannel';
 import ChannelDetails from './pages/channels/ChannelDetails';
 import Profile from './pages/dashboard/Profile';
@@ -33,12 +33,13 @@ function AppRoutes() {
             <Route element={<GuestLayout />}>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
             </Route>
 
             {/* Protected Routes */}
             <Route element={<Layout />}>
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/channels" element={<TeacherChannels />} />
+                <Route path="/channels" element={<Navigate to="/dashboard" />} />
                 <Route path="/channels/create" element={<CreateChannel />} />
                 <Route path="/channels/:id" element={<ChannelDetails />} />
                 <Route path="/profile" element={<Profile />} />

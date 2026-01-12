@@ -19,8 +19,8 @@ export default function JoinChannel() {
 
       alert("Successfully joined channel!");
 
-      // later we will redirect to student channels
-      navigate("/my-channels");
+      // redirect to student dashboard
+      navigate("/dashboard");
 
     } catch (error) {
       console.error("Join failed:", error);

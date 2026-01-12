@@ -28,13 +28,6 @@ export default function Layout() {
                                     Dashboard
                                 </Link>
                             </li>
-                            {user?.role === 'teacher' && (
-                                <li className="nav-item">
-                                    <Link to="/channels" className="nav-link text-white">
-                                        My Channels
-                                    </Link>
-                                </li>
-                            )}
                         </ul>
                         <ul className="navbar-nav">
                             <li className="nav-item">

@@ -185,7 +185,7 @@ body, .min-h-screen {
    GLASS UI COMPONENTS
    =============================== */
 .auth-card, .card {
-  background: var(--glass-bg) !important;
+  background: rgba(20, 20, 30, 0.85) !important;
   backdrop-filter: blur(25px) saturate(150%) !important;
   -webkit-backdrop-filter: blur(25px) saturate(150%);
   
@@ -201,7 +201,7 @@ body, .min-h-screen {
 
 .card:hover {
   transform: translateY(-10px);
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: rgba(10, 10, 20, 0.95) !important;
   border-color: #a855f7 !important;
   box-shadow: 0 10px 50px -15px #E0B0FF;
 }
@@ -386,11 +386,22 @@ a:hover {
   color: #ffffff !important;
 }
 
-/* UNIFORM HOVER EFFECT FOR ALL BUTTON TYPES */
+/* Hover refinements: gentler lift and tailored colors */
 .btn:hover {
-  transform: translateY(-3px) !important; /* Uniform lift effect */
-  filter: brightness(1.2) !important;     /* Uniform highlight effect */
-  box-shadow: none !important;            /* Ensures no glow appears on hover */
+  transform: translateY(-1px) !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+
+.btn-primary:hover, .btn-hero.btn-primary:hover {
+  background-color: #b26bfa !important; /* slightly lighter for hover */
+  color: #ffffff !important;
+}
+
+.btn-outline-primary:hover, .btn-hero.btn-outline-purple:hover {
+  background-color: rgba(168, 85, 247, 0.22) !important;
+  border-color: #b26bfa !important;
+  color: #ffffff !important;
 }
 
 .btn:active {

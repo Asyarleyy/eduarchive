@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function ChannelShow() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const [channel, setChannel] = useState(null);
@@ -16,6 +18,10 @@ export default function ChannelShow() {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [showCodePopup, setShowCodePopup] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showAccessRequests, setShowAccessRequests] = useState(false);
+  const [accessRequests, setAccessRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [rejectReasonInputs, setRejectReasonInputs] = useState({});
 
   const [previewMaterial, setPreviewMaterial] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -34,11 +40,14 @@ const [editForm, setEditForm] = useState({
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState(null);
 
   const [announcements, setAnnouncements] = useState([]);
+  const [editAnnouncementId, setEditAnnouncementId] = useState(null);
+  const [announcementEditForm, setAnnouncementEditForm] = useState({ title: "", message: "" });
 const [newAnnouncement, setNewAnnouncement] = useState({
   title: "",
   message: ""
 });
 const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
+  const [isJoined, setIsJoined] = useState(false);
 
 
   // ================= LOAD DATA =================
@@ -46,6 +55,7 @@ const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
     fetchChannelAndMaterials();
     fetchMaterials();
     fetchAnnouncements();
+    fetchJoinedStatus();
   }, [id]);
 
   const fetchChannelAndMaterials = async () => {
@@ -80,6 +90,20 @@ const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
   }
 };
 
+  const fetchJoinedStatus = async () => {
+    try {
+      const res = await axios.get('/api/channels/joined');
+      const joinedIds = (res.data || []).map(c => c.id);
+      setIsJoined(joinedIds.includes(Number(id)));
+    } catch (err) {
+      console.error('Joined status load error', err);
+    }
+  };
+
+  const canDownload = !(
+    channel && Number(channel.is_private) === 1 && user?.role === 'student' && !isJoined
+  );
+
 const createAnnouncement = async (e) => {
   e.preventDefault();
 
@@ -94,6 +118,36 @@ const createAnnouncement = async (e) => {
   }
 };
 
+// ===== ANNOUNCEMENT ACTIONS =====
+const startEditAnnouncement = (a) => {
+  setEditAnnouncementId(a.id);
+  setAnnouncementEditForm({ title: a.title, message: a.message });
+};
+
+const saveAnnouncementEdit = async (e) => {
+  e.preventDefault();
+  try {
+    await axios.put(`/api/announcements/${editAnnouncementId}`, announcementEditForm);
+    setEditAnnouncementId(null);
+    setAnnouncementEditForm({ title: "", message: "" });
+    fetchAnnouncements();
+  } catch {
+    alert("Update failed");
+  }
+};
+
+const deleteAnnouncement = async (aid) => {
+  if (!window.confirm("Delete this announcement?")) return;
+  try {
+    await axios.delete(`/api/announcements/${aid}`);
+    fetchAnnouncements();
+  } catch {
+    alert("Delete failed");
+  }
+};
+
+// Pin feature removed per request
+
 
   const fetchMembers = async () => {
     try {
@@ -104,6 +158,38 @@ const createAnnouncement = async (e) => {
     }
   };
 
+  const fetchAccessRequests = async () => {
+    try {
+      setLoadingRequests(true);
+      const res = await axios.get(`/api/channels/${id}/access-requests`);
+      setAccessRequests(res.data || []);
+    } catch (err) {
+      console.error("Access requests load error", err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const approveAccessRequest = async (requestId) => {
+    try {
+      await axios.post(`/api/access-requests/${requestId}/approve`);
+      await fetchAccessRequests();
+      await fetchMembers();
+    } catch (err) {
+      alert(err?.response?.data?.error || "Approve failed");
+    }
+  };
+
+  const rejectAccessRequest = async (requestId) => {
+    try {
+      const reason = rejectReasonInputs[requestId] || "";
+      await axios.post(`/api/access-requests/${requestId}/reject`, { reason });
+      await fetchAccessRequests();
+    } catch (err) {
+      alert(err?.response?.data?.error || "Reject failed");
+    }
+  };
+
   // ================= CHANNEL =================
   const deleteChannel = async () => {
     if (!window.confirm("Delete this channel permanently?")) return;
@@ -111,9 +197,11 @@ const createAnnouncement = async (e) => {
     try {
       await axios.delete(`/api/channels/${id}`);
       alert("Channel deleted");
-      window.location.href = "/channels";
-    } catch {
-      alert("Delete failed");
+      window.location.href = "/dashboard";
+    } catch (err) {
+      console.error('Delete error:', err);
+      const errorMsg = err.response?.data?.error || 'Delete failed';
+      alert(errorMsg);
     }
   };
 
@@ -126,6 +214,19 @@ const createAnnouncement = async (e) => {
       fetchMembers();
     } catch {
       alert("Failed to remove");
+    }
+  };
+
+  const leaveChannel = async () => {
+    if (!window.confirm("Are you sure you want to leave this channel?")) return;
+
+    try {
+      await axios.post(`/api/channels/${id}/leave`);
+      alert("You have left the channel");
+      setIsJoined(false);
+      navigate('/channels');
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to leave channel');
     }
   };
 
@@ -155,6 +256,10 @@ formData.append("file", uploadForm.file);
 
   // ================= MATERIAL ACTIONS =================
   const handleDownload = async (mat) => {
+    if (!canDownload) {
+      alert('Join this private channel to download materials.');
+      return;
+    }
     try {
       const res = await axios.get(`/api/materials/${mat.id}/download`, {
         responseType: "blob",
@@ -243,13 +348,26 @@ const updateMaterial = async (e) => {
     formData.append("title", editForm.title);
     formData.append("description", editForm.description);
 
-    if (editForm.file) {
+    const fileWasReplaced = !!editForm.file;
+    if (fileWasReplaced) {
       formData.append("file", editForm.file);
     }
 
-    await axios.post(`/api/materials/${editMaterial.id}/update`, formData, {
+    const res = await axios.post(`/api/materials/${editMaterial.id}/update`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
+
+    const updated = res.data?.material || null;
+
+    // If preview is open and it's the same material, refresh the details and file preview
+    if (previewMaterial && updated && previewMaterial.id === updated.id) {
+      // Revoke old blob URL if file changed to force reload
+      if (fileWasReplaced && previewUrl) {
+        try { URL.revokeObjectURL(previewUrl); } catch {}
+      }
+      setPreviewUrl(null);
+      setPreviewMaterial(updated);
+    }
 
     alert("Material updated successfully");
     setEditMaterial(null);
@@ -269,11 +387,36 @@ const updateMaterial = async (e) => {
     <div className="py-5">
       <div className="container">
 
+        <button
+          className="btn btn-outline-secondary mb-3"
+          onClick={() => {
+            if (location.state?.fromSearch) {
+              navigate(-1);
+            } else if (location.state?.fromSearchModal) {
+              navigate(location.state.returnTo || '/dashboard', {
+                state: {
+                  reopenSearchModal: true,
+                  searchTerm: location.state.searchTerm || ''
+                }
+              });
+            } else {
+              navigate('/channels');
+            }
+          }}
+        >
+          Back
+        </button>
+
         {/* ================= CHANNEL HEADER ================= */}
         {channel && (
           <div className="card mb-4">
             <div className="card-body">
-              <h2 className="text-white">{channel.title}</h2>
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <h2 className="text-white mb-0">{channel.title}</h2>
+                <span className={`badge ${Number(channel.is_private) === 1 ? 'bg-warning text-dark' : 'bg-success'}`}>
+                  {Number(channel.is_private) === 1 ? 'Private' : 'Public'}
+                </span>
+              </div>
               <p className="text-muted">{channel.description}</p>
 
               {user?.role === "teacher" && (
@@ -295,7 +438,28 @@ const updateMaterial = async (e) => {
                   >
                     View Students
                   </button>
+
+                  <button
+                    className="btn btn-outline-warning ms-2"
+                    onClick={() => {
+                      fetchAccessRequests();
+                      setShowAccessRequests(true);
+                    }}
+                  >
+                    Access Requests
+                  </button>
                 </>
+              )}
+
+              {/* Leave Channel Button for Students */}
+              {user?.role === "student" && isJoined && (
+                <button 
+                  className="btn"
+                  style={{ backgroundColor: '#dc3545', color: 'white', fontWeight: 'bold' }}
+                  onClick={leaveChannel}
+                >
+                  Leave Channel
+                </button>
               )}
             </div>
           </div>
@@ -385,8 +549,36 @@ const updateMaterial = async (e) => {
                   onClick={() => setPreviewMaterial(m)}
                 >
                   <div className="card-body">
-                    <h5 className="text-white">{m.title}</h5>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                      <h5 className="text-white" style={{ margin: 0 }}>{m.title}</h5>
+                      {user?.role === 'teacher' && (
+                        <span
+                          className="badge"
+                          style={{
+                            backgroundColor:
+                              m.status === 'approved'
+                                ? '#22c55e'
+                                : m.status === 'pending'
+                                ? '#f59e0b'
+                                : '#ef4444',
+                            color: 'white',
+                            fontSize: '0.7rem',
+                            padding: '0.25rem 0.5rem',
+                            whiteSpace: 'nowrap',
+                            marginLeft: '0.5rem'
+                          }}
+                        >
+                          {m.status?.charAt(0).toUpperCase() + m.status?.slice(1) || 'Pending'}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-muted small">{m.description}</p>
+                    {user?.role === 'teacher' && m.status === 'rejected' && m.rejection_reason && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.5rem', backgroundColor: '#1a1a20', borderLeft: '3px solid #ef4444', borderRadius: '4px' }}>
+                        <p style={{ color: '#ef4444', fontSize: '0.85rem', margin: 0, fontWeight: '600' }}>Rejection Reason:</p>
+                        <p style={{ color: '#cbd5e1', fontSize: '0.85rem', margin: '0.25rem 0 0 0' }}>{m.rejection_reason}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -394,68 +586,108 @@ const updateMaterial = async (e) => {
           </div>
         )}
 
-        <h4 className="text-white mt-5">Announcements</h4>
+        {(user?.role === "teacher" || isJoined) && (
+          <>
+            <h4 className="text-white mt-5">Announcements</h4>
 
-{user?.role === "teacher" && (
-  <>
-    <button
-      className="btn btn-primary mb-3"
-      onClick={() => setShowAnnouncementForm(!showAnnouncementForm)}
-    >
-      {showAnnouncementForm ? "Cancel" : "+ New Announcement"}
-    </button>
+            {user?.role === "teacher" && (
+              <>
+                <button
+                  className="btn btn-primary mb-3"
+                  onClick={() => setShowAnnouncementForm(!showAnnouncementForm)}
+                >
+                  {showAnnouncementForm ? "Cancel" : "+ New Announcement"}
+                </button>
 
-    {showAnnouncementForm && (
-      <div className="card mb-3">
-        <div className="card-body">
-          <form onSubmit={createAnnouncement}>
-            <input
-              className="form-control mb-2"
-              placeholder="Title"
-              value={newAnnouncement.title}
-              onChange={(e) =>
-                setNewAnnouncement({ ...newAnnouncement, title: e.target.value })
-              }
-              required
-            />
+                {showAnnouncementForm && (
+                  <div className="card mb-3">
+                    <div className="card-body">
+                      <form onSubmit={createAnnouncement}>
+                        <input
+                          className="form-control mb-2"
+                          placeholder="Title"
+                          value={newAnnouncement.title}
+                          onChange={(e) =>
+                            setNewAnnouncement({ ...newAnnouncement, title: e.target.value })
+                          }
+                          required
+                        />
 
-            <textarea
-              className="form-control mb-2"
-              rows={3}
-              placeholder="Message"
-              value={newAnnouncement.message}
-              onChange={(e) =>
-                setNewAnnouncement({ ...newAnnouncement, message: e.target.value })
-              }
-              required
-            />
+                        <textarea
+                          className="form-control mb-2"
+                          rows={3}
+                          placeholder="Message"
+                          value={newAnnouncement.message}
+                          onChange={(e) =>
+                            setNewAnnouncement({ ...newAnnouncement, message: e.target.value })
+                          }
+                          required
+                        />
 
-            <button className="btn btn-primary">Post</button>
-          </form>
-        </div>
-      </div>
-    )}
-  </>
-)}
+                        <button className="btn btn-primary">Post</button>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
 
-{announcements.length === 0 ? (
-  <div className="card">
-    <div className="card-body text-muted">
-      No announcements yet.
-    </div>
-  </div>
-) : (
-  <div className="card">
-    <div className="card-body">
-      {announcements.map(a => (
-        <div key={a.id} className="mb-3 border-bottom pb-2">
-          <h5 className="text-white">{a.title}</h5>
-          <p className="text-muted">{a.message}</p>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
+            {announcements.length === 0 ? (
+              <div className="card">
+                <div className="card-body text-muted">
+                  No announcements yet.
+                </div>
+              </div>
+            ) : (
+              <div className="card">
+                <div className="card-body">
+                  {announcements.map(a => (
+                    <div key={a.id} className="mb-3 border-bottom pb-2">
+                      {editAnnouncementId === a.id ? (
+                        <form onSubmit={saveAnnouncementEdit}>
+                          <input
+                            className="form-control mb-2"
+                            value={announcementEditForm.title}
+                            onChange={(e) => setAnnouncementEditForm({ ...announcementEditForm, title: e.target.value })}
+                            required
+                          />
+                          <textarea
+                            className="form-control mb-2"
+                            rows={3}
+                            value={announcementEditForm.message}
+                            onChange={(e) => setAnnouncementEditForm({ ...announcementEditForm, message: e.target.value })}
+                            required
+                          />
+                          <div className="d-flex gap-2">
+                            <button className="btn btn-primary btn-sm">Save</button>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditAnnouncementId(null)}>Cancel</button>
+                          </div>
+                        </form>
+                      ) : (
+                        <>
+                          <div className="d-flex justify-content-between align-items-center">
+                            <h5 className="text-white mb-1">{a.title}</h5>
+                            <small className="text-muted">{new Date(a.created_at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })}</small>
+                          </div>
+                          <p className="text-muted">{a.message}</p>
+                          <div className="d-flex justify-content-between align-items-center">
+                            <small className="text-muted">Posted by: {a.creator_name}</small>
+                            {user?.role === "teacher" && (
+                              <div className="d-flex gap-2">
+                                <button className="btn btn-warning btn-sm" onClick={() => startEditAnnouncement(a)}>Edit</button>
+                                <button className="btn btn-danger btn-sm" onClick={() => deleteAnnouncement(a.id)}>Delete</button>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
 
 
@@ -516,6 +748,8 @@ const updateMaterial = async (e) => {
                     <button
                       className="btn btn-primary w-100 mb-2"
                       onClick={() => handleDownload(previewMaterial)}
+                      disabled={!canDownload}
+                      title={!canDownload ? "Join this private channel to download" : undefined}
                     >
                       Download
                     </button>
@@ -670,11 +904,12 @@ const updateMaterial = async (e) => {
             <li
               key={m.id}
               className="list-group-item d-flex justify-content-between align-items-center"
+              style={{ background: "#1a1a20", borderColor: "#2c3245", color: "#ffffff" }}
             >
               <div>
                 <strong>{m.name}</strong>
                 <br />
-                <small className="text-muted">{m.email}</small>
+                <small className="text-muted" style={{ color: "#cbd5e1" }}>{m.email}</small>
               </div>
 
               <button
@@ -694,6 +929,52 @@ const updateMaterial = async (e) => {
       >
         Close
       </button>
+    </div>
+  </div>
+)}
+
+{showAccessRequests && (
+  <div className="popup-backdrop">
+    <div className="card p-4" style={{ minWidth: "600px" }}>
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h4 className="text-white mb-0">Access Requests</h4>
+        <button className="btn btn-sm btn-outline-secondary" onClick={() => setShowAccessRequests(false)}>✕</button>
+      </div>
+
+      {loadingRequests ? (
+        <div className="text-white">Loading...</div>
+      ) : accessRequests.length === 0 ? (
+        <p className="text-muted">No pending requests.</p>
+      ) : (
+        <div className="d-flex flex-column gap-2">
+          {accessRequests.map((r) => (
+            <div key={r.id} className="p-3" style={{ background: "#1a1a20", borderRadius: "8px", border: "1px solid #333" }}>
+              <div className="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                  <strong className="text-white">{r.requester_name}</strong>
+                  <div className="small text-muted">{r.requester_email}</div>
+                  <div className="small text-muted">Requested: {new Date(r.created_at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</div>
+                </div>
+                <span className="badge bg-warning text-dark">PENDING</span>
+              </div>
+
+              <div className="d-flex flex-column gap-2">
+                <div className="d-flex gap-2">
+                  <button className="btn btn-success btn-sm flex-fill" onClick={() => approveAccessRequest(r.id)}>Approve</button>
+                  <button className="btn btn-danger btn-sm flex-fill" onClick={() => rejectAccessRequest(r.id)}>Reject</button>
+                </div>
+                <textarea
+                  className="form-control form-control-sm"
+                  rows={2}
+                  placeholder="Reason for rejection (optional)"
+                  value={rejectReasonInputs[r.id] || ''}
+                  onChange={(e) => setRejectReasonInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   </div>
 )}

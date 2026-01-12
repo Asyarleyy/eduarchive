@@ -1,14 +1,15 @@
 import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
+import ResetPassword from "../pages/auth/ResetPassword";
 import Dashboard from "../pages/dashboard/Dashboard";
 import Profile from "../pages/dashboard/Profile";
 
-import TeacherChannels from "../pages/channels/TeacherChannels";
 import CreateChannel from "../pages/channels/CreateChannel";
 import ChannelDetails from "../pages/channels/ChannelDetails";
+import SearchChannels from "../pages/channels/SearchChannels";
 
 import Announcements from "../pages/channels/Announcements";
 
@@ -20,14 +21,16 @@ export default function AppRouter() {
         {/* Auth */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Dashboard */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
 
-        {/* Channels (Teacher) */}
-        <Route path="/channels" element={<TeacherChannels />} />
+        {/* Channels */}
+        <Route path="/channels" element={<Navigate to="/dashboard" />} />
         <Route path="/channels/create" element={<CreateChannel />} />
+        <Route path="/search" element={<SearchChannels />} />
         <Route path="/channels/:id" element={<ChannelDetails />} />
 
         {/* Default */}

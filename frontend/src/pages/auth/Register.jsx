@@ -26,8 +26,14 @@ export default function Register() {
     const [zoom, setZoom] = useState(1);
     const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
 
+    // Teacher verification proof (png/pdf)
+    const [teacherProof, setTeacherProof] = useState(null);
+    const [teacherProofName, setTeacherProofName] = useState('');
+
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const { register } = useAuth();
     const navigate = useNavigate();
 
@@ -77,8 +83,57 @@ export default function Register() {
         setErrors({ general: ['Profile picture is required'] });
         return;
     }
+    if (!formData.first_name?.trim()) {
+        setErrors({ general: ['First name is required'] });
+        return;
+    }
+    if (!formData.last_name?.trim()) {
+        setErrors({ general: ['Last name is required'] });
+        return;
+    }
+    if (!formData.name?.trim()) {
+        setErrors({ general: ['Display name is required'] });
+        return;
+    }
+    if (!formData.email?.trim()) {
+        setErrors({ general: ['Email is required'] });
+        return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        setErrors({ general: ['Please enter a valid email address'] });
+        return;
+    }
+    if (!formData.password) {
+        setErrors({ general: ['Password is required'] });
+        return;
+    }
+    if (formData.password.length < 6) {
+        setErrors({ general: ['Password must be at least 6 characters'] });
+        return;
+    }
+    if (!formData.password_confirmation) {
+        setErrors({ general: ['Password confirmation is required'] });
+        return;
+    }
     if (formData.password !== formData.password_confirmation) {
         setErrors({ password: ['Passwords do not match'] });
+        return;
+    }
+    if (!formData.gender) {
+        setErrors({ general: ['Gender is required'] });
+        return;
+    }
+    if (!formData.birth_date) {
+        setErrors({ general: ['Birth date is required'] });
+        return;
+    }
+    if (!formData.school?.trim()) {
+        setErrors({ general: ['School/Institution is required'] });
+        return;
+    }
+
+    if (formData.role === 'teacher' && !teacherProof) {
+        setErrors({ general: ['Teacher validation proof (PNG/PDF) is required'] });
         return;
     }
 
@@ -101,17 +156,29 @@ export default function Register() {
 
         // Append the cropped image file
         data.append('image', pendingImage);
+        if (teacherProof) {
+            data.append('teacher_proof', teacherProof);
+        }
 
         // 3. Send to AuthContext
         const result = await register(data);
 
         if (result.success) {
-            navigate('/dashboard');
+            // Only redirect students to dashboard
+            // Teachers will be redirected by the auth context to see pending verification message
+            if (formData.role === 'student') {
+                navigate('/dashboard');
+            } else if (formData.role === 'teacher') {
+                // Teacher registration successful - they'll see the pending verification modal
+                // Just redirect them to dashboard where the pending modal will display
+                navigate('/dashboard');
+            }
         } else {
             setErrors(result.errors || { general: [result.message] });
         }
     } catch (err) {
-        setErrors({ general: ['An unexpected error occurred'] });
+        console.error('Registration error:', err);
+        setErrors({ general: [err.message || 'An unexpected error occurred'] });
     } finally {
         setLoading(false);
     }
@@ -126,6 +193,13 @@ export default function Register() {
 
             <div className="auth-body p-4 pt-0">
                 <form onSubmit={handleSubmit}>
+                    
+                    {/* ERROR MESSAGES */}
+                    {errors.general && (
+                        <div className="alert alert-danger mb-3" role="alert">
+                            {errors.general.map((err, idx) => <div key={idx}>{err}</div>)}
+                        </div>
+                    )}
                     
                     {/* 1. PROFILE PICTURE SELECTION */}
                     <div className="text-center mb-4">
@@ -157,6 +231,35 @@ export default function Register() {
                         </div>
                         {errors.role && <div className="text-danger small mt-1 text-center">{errors.role[0]}</div>}
                     </div>
+
+                    {/* 2b. TEACHER VERIFICATION PROOF */}
+                    {formData.role === 'teacher' && (
+                        <div className="mb-4">
+                            <label className="form-label small text-muted">Upload verification proof (PNG/PDF)</label>
+                            <div className="d-flex align-items-center gap-2">
+                                <label className="btn btn-outline-primary btn-sm mb-0">
+                                    {teacherProofName || 'Choose file'}
+                                    <input
+                                        type="file"
+                                        hidden
+                                        accept="image/png,image/jpeg,application/pdf"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            const allowed = ['image/png', 'image/jpeg', 'application/pdf'];
+                                            if (!allowed.includes(file.type)) {
+                                                setErrors({ general: ['Only PNG, JPG, or PDF are allowed'] });
+                                                return;
+                                            }
+                                            setTeacherProof(file);
+                                            setTeacherProofName(file.name);
+                                        }}
+                                    />
+                                </label>
+                                {teacherProofName && <span className="text-muted small">{teacherProofName}</span>}
+                            </div>
+                        </div>
+                    )}
 
                     {/* 3. NAME FIELDS */}
                     <div className="row g-3 mb-3">
@@ -205,12 +308,32 @@ export default function Register() {
                     {/* 5. PASSWORDS */}
                     <div className="row g-3 mb-4">
                         <div className="col-md-6">
-                            <label className="form-label small text-muted">Password</label>
-                            <input name="password" type="password" className="form-control" value={formData.password} onChange={handleChange} required />
+                            <label className="form-label small text-muted mb-1">Password</label>
+                            <div style={{ position: 'relative' }}>
+                                <input name="password" type={showPassword ? 'text' : 'password'} className="form-control" value={formData.password} onChange={handleChange} required />
+                                <button
+                                    type="button"
+                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, lineHeight: 1, color: '#888' }}
+                                    onClick={() => setShowPassword(p => !p)}
+                                >
+                                    {showPassword ? '🙈' : '👁️'}
+                                </button>
+                            </div>
                         </div>
                         <div className="col-md-6">
-                            <label className="form-label small text-muted">Confirm Password</label>
-                            <input name="password_confirmation" type="password" className="form-control" value={formData.password_confirmation} onChange={handleChange} required />
+                            <label className="form-label small text-muted mb-1">Confirm Password</label>
+                            <div style={{ position: 'relative' }}>
+                                <input name="password_confirmation" type={showConfirmPassword ? 'text' : 'password'} className="form-control" value={formData.password_confirmation} onChange={handleChange} required />
+                                <button
+                                    type="button"
+                                    aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, lineHeight: 1, color: '#888' }}
+                                    onClick={() => setShowConfirmPassword(p => !p)}
+                                >
+                                    {showConfirmPassword ? '🙈' : '👁️'}
+                                </button>
+                            </div>
                         </div>
                         {errors.password && <div className="text-danger small mt-1 px-2">{errors.password[0]}</div>}
                     </div>

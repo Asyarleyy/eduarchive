@@ -107,7 +107,7 @@ export default function Profile() {
                         <ProfileItem label="First Name" value={user?.first_name} />
                         <ProfileItem label="Last Name" value={user?.last_name} />
                         <ProfileItem label="Gender" value={user?.gender} />
-                        <ProfileItem label="Birth Date" value={user?.birth_date ? new Date(user.birth_date).toLocaleDateString('en-GB') : null} />
+                        <ProfileItem label="Birth Date" value={user?.birth_date ? new Date(user.birth_date).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' }) : null} />
                     </div>
                     <div className="col-md-6 ps-md-5">
                         <ProfileItem label="Display Name" value={user?.name} />
@@ -147,7 +147,23 @@ export default function Profile() {
                     <div className="col-6"><input className="form-control" placeholder="Last Name" value={profileForm.last_name} onChange={e => setProfileForm({...profileForm, last_name: e.target.value})} /></div>
                 </div>
                 <input className="form-control mb-2" placeholder="Display Name" value={profileForm.name} onChange={e => setProfileForm({...profileForm, name: e.target.value})} />
-                <input className="form-control mb-3" placeholder="School" value={profileForm.school} onChange={e => setProfileForm({...profileForm, school: e.target.value})} />
+                <input className="form-control mb-2" placeholder="School" value={profileForm.school} onChange={e => setProfileForm({...profileForm, school: e.target.value})} />
+                
+                <div className="row g-2 mb-2">
+                    <div className="col-6">
+                        <select className="form-control" value={profileForm.gender} onChange={e => setProfileForm({...profileForm, gender: e.target.value})} style={{ color: '#fff', backgroundColor: '#1a1a20' }}>
+                            <option value="" style={{ color: '#888' }}>Select Gender</option>
+                            <option value="Male" style={{ color: '#fff', backgroundColor: '#1a1a20' }}>Male</option>
+                            <option value="Female" style={{ color: '#fff', backgroundColor: '#1a1a20' }}>Female</option>
+                        </select>
+                    </div>
+                    <div className="col-6">
+                        <input type="date" className="form-control" placeholder="Birth Date" value={profileForm.birth_date} onChange={e => setProfileForm({...profileForm, birth_date: e.target.value})} style={{ color: '#fff', backgroundColor: '#1a1a20' }} />
+                    </div>
+                </div>
+                
+                <input type="email" className="form-control mb-3" placeholder="Email Address" value={profileForm.email} onChange={e => setProfileForm({...profileForm, email: e.target.value})} />
+                
                 <div className="d-flex justify-content-end gap-2">
                     <button type="button" className="btn btn-secondary" onClick={() => setShowEdit(false)}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? "Saving..." : "Save"}</button>
